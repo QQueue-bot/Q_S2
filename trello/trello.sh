@@ -117,6 +117,10 @@ case "$cmd" in
     list_id="$(resolve_list "${3:?listId or list name required}")"
     api_put "/cards/$card_id" --data-urlencode "idList=$list_id"
     ;;
+  archive-card)
+    card_id="$(resolve_card "${2:?cardId or card name required}")"
+    api_put "/cards/$card_id/closed" --data-urlencode "value=true"
+    ;;
   rename-list)
     list_id="$(resolve_list "${2:?listId or list name required}")"
     name="${3:?new list name required}"
@@ -139,6 +143,7 @@ Commands:
   cards
   add-card "Card title" <listId|list name>
   move-card <cardId|card name> <listId|list name>
+  archive-card <cardId|card name>
   rename-list <listId|list name> "New name"
   add-list "List name"
   archive-list <listId|list name>

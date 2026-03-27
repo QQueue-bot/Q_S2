@@ -28,6 +28,10 @@ case "$cmd" in
     list="${2:?destination list required}"
     ./trello.sh move-card "$card" "$list"
     ;;
+  archive)
+    card="${1:?card title required}"
+    ./trello.sh archive-card "$card"
+    ;;
   rename-list)
     from="${1:?current list name required}"
     to="${2:?new list name required}"
@@ -48,6 +52,7 @@ Friendly kanban wrapper:
   ./trello/kanban.sh cards
   ./trello/kanban.sh add "Card title" [list]
   ./trello/kanban.sh move "Card title" "Doing"
+  ./trello/kanban.sh archive "Card title"
   ./trello/kanban.sh rename-list "Backlog" "Next"
   ./trello/kanban.sh add-list "Waiting"
   ./trello/kanban.sh archive-list "Trello Starter Guide"

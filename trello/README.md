@@ -17,6 +17,7 @@ Low-level helper:
 ./trello/trello.sh cards
 ./trello/trello.sh add-card "Card title" "Backlog"
 ./trello/trello.sh move-card "Card title" "In Progress"
+./trello/trello.sh archive-card "Card title"
 ./trello/trello.sh rename-list "Backlog" "Next"
 ./trello/trello.sh add-list "Waiting"
 ./trello/trello.sh archive-list "Trello Starter Guide"
@@ -29,6 +30,7 @@ Friendly kanban wrapper:
 ./trello/kanban.sh cards
 ./trello/kanban.sh add "Write docs" "Backlog"
 ./trello/kanban.sh move "Write docs" "In Progress"
+./trello/kanban.sh archive "Write docs"
 ```
 
 Credentials are stored locally in `trello/config.json`.
