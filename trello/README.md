@@ -8,6 +8,8 @@ Local helper scripts/config for Trello board access.
 
 ## Usage
 
+Low-level helper:
+
 ```bash
 ./trello/trello.sh me
 ./trello/trello.sh board
@@ -18,6 +20,15 @@ Local helper scripts/config for Trello board access.
 ./trello/trello.sh rename-list "Backlog" "Next"
 ./trello/trello.sh add-list "Waiting"
 ./trello/trello.sh archive-list "Trello Starter Guide"
+```
+
+Friendly kanban wrapper:
+
+```bash
+./trello/kanban.sh show
+./trello/kanban.sh cards
+./trello/kanban.sh add "Write docs" "Backlog"
+./trello/kanban.sh move "Write docs" "In Progress"
 ```
 
 Credentials are stored locally in `trello/config.json`.
