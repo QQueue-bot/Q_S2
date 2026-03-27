@@ -37,6 +37,62 @@ api_put() {
   curl -sS -X PUT "$BASE$path?key=$KEY&token=$TOKEN" "$@"
 }
 
+find_list_id_by_name() {
+  local name="$1"
+  python3 - "$name" <<'PY'
+import json, subprocess, sys
+name = sys.argv[1].strip().lower()
+out = subprocess.check_output(['bash','-lc','./trello.sh lists'], text=True, cwd='.')
+lists = json.loads(out)
+matches = [x for x in lists if x['name'].strip().lower() == name and not x.get('closed')]
+if len(matches) == 1:
+    print(matches[0]['id'])
+    sys.exit(0)
+if len(matches) > 1:
+    print(f"Ambiguous list name: {sys.argv[1]}", file=sys.stderr)
+    sys.exit(2)
+print(f"List not found: {sys.argv[1]}", file=sys.stderr)
+sys.exit(1)
+PY
+}
+
+find_card_id_by_name() {
+  local name="$1"
+  python3 - "$name" <<'PY'
+import json, subprocess, sys
+name = sys.argv[1].strip().lower()
+out = subprocess.check_output(['bash','-lc','./trello.sh cards'], text=True, cwd='.')
+cards = json.loads(out)
+matches = [x for x in cards if x['name'].strip().lower() == name and not x.get('closed')]
+if len(matches) == 1:
+    print(matches[0]['id'])
+    sys.exit(0)
+if len(matches) > 1:
+    print(f"Ambiguous card name: {sys.argv[1]}", file=sys.stderr)
+    sys.exit(2)
+print(f"Card not found: {sys.argv[1]}", file=sys.stderr)
+sys.exit(1)
+PY
+}
+
+resolve_list() {
+  local value="$1"
+  if [[ "$value" =~ ^[A-Fa-f0-9]{24}$ ]]; then
+    echo "$value"
+  else
+    find_list_id_by_name "$value"
+  fi
+}
+
+resolve_card() {
+  local value="$1"
+  if [[ "$value" =~ ^[A-Fa-f0-9]{24}$ ]]; then
+    echo "$value"
+  else
+    find_card_id_by_name "$value"
+  fi
+}
+
 cmd="${1:-board}"
 case "$cmd" in
   me)
@@ -53,16 +109,16 @@ case "$cmd" in
     ;;
   add-card)
     name="${2:?card name required}"
-    list_id="${3:?listId required}"
+    list_id="$(resolve_list "${3:?listId or list name required}")"
     api_post "/cards" --data-urlencode "name=$name" --data-urlencode "idList=$list_id"
     ;;
   move-card)
-    card_id="${2:?cardId required}"
-    list_id="${3:?listId required}"
+    card_id="$(resolve_card "${2:?cardId or card name required}")"
+    list_id="$(resolve_list "${3:?listId or list name required}")"
     api_put "/cards/$card_id" --data-urlencode "idList=$list_id"
     ;;
   rename-list)
-    list_id="${2:?listId required}"
+    list_id="$(resolve_list "${2:?listId or list name required}")"
     name="${3:?new list name required}"
     api_put "/lists/$list_id" --data-urlencode "name=$name"
     ;;
@@ -71,7 +127,7 @@ case "$cmd" in
     api_post "/lists" --data-urlencode "name=$name" --data-urlencode "idBoard=$BOARD_SHORT_ID"
     ;;
   archive-list)
-    list_id="${2:?listId required}"
+    list_id="$(resolve_list "${2:?listId or list name required}")"
     api_put "/lists/$list_id/closed" --data-urlencode "value=true"
     ;;
   help|--help|-h)
@@ -81,11 +137,15 @@ Commands:
   board
   lists
   cards
-  add-card "Card title" <listId>
-  move-card <cardId> <listId>
-  rename-list <listId> "New name"
+  add-card "Card title" <listId|list name>
+  move-card <cardId|card name> <listId|list name>
+  rename-list <listId|list name> "New name"
   add-list "List name"
-  archive-list <listId>
+  archive-list <listId|list name>
+
+Notes:
+  - Card and list names must be exact when using names instead of IDs.
+  - If multiple cards/lists share the same name, the command will error as ambiguous.
 EOF
     ;;
   *)

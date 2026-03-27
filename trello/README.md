@@ -13,12 +13,14 @@ Local helper scripts/config for Trello board access.
 ./trello/trello.sh board
 ./trello/trello.sh lists
 ./trello/trello.sh cards
-./trello/trello.sh add-card "Card title" <listId>
-./trello/trello.sh move-card <cardId> <listId>
-./trello/trello.sh rename-list <listId> "New name"
-./trello/trello.sh add-list "List name"
-./trello/trello.sh archive-list <listId>
+./trello/trello.sh add-card "Card title" "Backlog"
+./trello/trello.sh move-card "Card title" "In Progress"
+./trello/trello.sh rename-list "Backlog" "Next"
+./trello/trello.sh add-list "Waiting"
+./trello/trello.sh archive-list "Trello Starter Guide"
 ```
 
 Credentials are stored locally in `trello/config.json`.
 Rotate the token if it was shared in chat.
+
+Names can be used instead of raw Trello IDs for cards and lists as long as they match exactly and are unique.
