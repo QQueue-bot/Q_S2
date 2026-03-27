@@ -2,7 +2,6 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
-CFG="config.json"
 
 json_get() {
   python3 - "$1" <<'PY'
@@ -33,6 +32,11 @@ api_post() {
   curl -sS -X POST "$BASE$path?key=$KEY&token=$TOKEN" "$@"
 }
 
+api_put() {
+  local path="$1"; shift
+  curl -sS -X PUT "$BASE$path?key=$KEY&token=$TOKEN" "$@"
+}
+
 cmd="${1:-board}"
 case "$cmd" in
   me)
@@ -49,12 +53,40 @@ case "$cmd" in
     ;;
   add-card)
     name="${2:?card name required}"
-    list_id="${3:-}"
-    if [[ -z "$list_id" ]]; then
-      echo "Usage: $0 add-card \"Card title\" <listId>" >&2
-      exit 1
-    fi
+    list_id="${3:?listId required}"
     api_post "/cards" --data-urlencode "name=$name" --data-urlencode "idList=$list_id"
+    ;;
+  move-card)
+    card_id="${2:?cardId required}"
+    list_id="${3:?listId required}"
+    api_put "/cards/$card_id" --data-urlencode "idList=$list_id"
+    ;;
+  rename-list)
+    list_id="${2:?listId required}"
+    name="${3:?new list name required}"
+    api_put "/lists/$list_id" --data-urlencode "name=$name"
+    ;;
+  add-list)
+    name="${2:?list name required}"
+    api_post "/lists" --data-urlencode "name=$name" --data-urlencode "idBoard=$BOARD_SHORT_ID"
+    ;;
+  archive-list)
+    list_id="${2:?listId required}"
+    api_put "/lists/$list_id/closed" --data-urlencode "value=true"
+    ;;
+  help|--help|-h)
+    cat <<'EOF'
+Commands:
+  me
+  board
+  lists
+  cards
+  add-card "Card title" <listId>
+  move-card <cardId> <listId>
+  rename-list <listId> "New name"
+  add-list "List name"
+  archive-list <listId>
+EOF
     ;;
   *)
     echo "Unknown command: $cmd" >&2

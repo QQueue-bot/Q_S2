@@ -14,6 +14,10 @@ Local helper scripts/config for Trello board access.
 ./trello/trello.sh lists
 ./trello/trello.sh cards
 ./trello/trello.sh add-card "Card title" <listId>
+./trello/trello.sh move-card <cardId> <listId>
+./trello/trello.sh rename-list <listId> "New name"
+./trello/trello.sh add-list "List name"
+./trello/trello.sh archive-list <listId>
 ```
 
 Credentials are stored locally in `trello/config.json`.
