@@ -1,0 +1,67 @@
+{
+  "environment": {
+    "mode": "testnet",
+    "exchange": "bybit",
+    "marketType": "usdt_perpetual"
+  },
+  "trading": {
+    "enabled": false,
+    "defaultSymbol": "BTCUSDT",
+    "allowedSymbols": [
+      "BTCUSDT"
+    ],
+    "supportedSignals": [
+      "ENTER_LONG",
+      "EXIT_LONG",
+      "ENTER_SHORT",
+      "EXIT_SHORT"
+    ]
+  },
+  "positionSizing": {
+    "mode": "account_percent",
+    "accountPercent": 50,
+    "leverage": 4,
+    "notes": "Effective position notional is derived from accountPercent and leverage."
+  },
+  "riskControls": {
+    "maxAccountPercent": 50,
+    "maxLeverage": 4,
+    "allowExitSignalsAsSafety": true,
+    "killSwitch": false
+  },
+  "takeProfit": {
+    "enabled": true,
+    "levels": [
+      { "index": 1, "triggerPercent": 0.0, "closePercent": 0.0, "enabled": true },
+      { "index": 2, "triggerPercent": 0.0, "closePercent": 0.0, "enabled": true },
+      { "index": 3, "triggerPercent": 0.0, "closePercent": 0.0, "enabled": true },
+      { "index": 4, "triggerPercent": 0.0, "closePercent": 0.0, "enabled": true },
+      { "index": 5, "triggerPercent": 0.0, "closePercent": 0.0, "enabled": true },
+      { "index": 6, "triggerPercent": 0.0, "closePercent": 0.0, "enabled": true }
+    ],
+    "notes": "Trigger percentages are measured from entry price. Close percentages can differ per TP level."
+  },
+  "stopLoss": {
+    "enabled": true,
+    "triggerPercent": 0.0,
+    "notes": "Measured as percentage move from entry price."
+  },
+  "breakEven": {
+    "enabled": true,
+    "triggerPercent": 0.0,
+    "notes": "When reached, stop loss may be moved to entry/break-even."
+  },
+  "dca": {
+    "enabled": false,
+    "mode": "levels",
+    "maxAdds": 0,
+    "levels": [],
+    "notes": "DCA is strategically important but intentionally scaffolded only in Sprint 3. Strategy values to be defined later."
+  },
+  "storage": {
+    "databasePath": "./data/s2.sqlite"
+  },
+  "logging": {
+    "level": "info"
+  }
+}
