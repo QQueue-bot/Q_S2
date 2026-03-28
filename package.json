@@ -1,0 +1,15 @@
+{
+  "name": "q-s2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "validate:settings": "node scripts/validate-settings.js",
+    "test:signal": "node scripts/test-parse-signal.js",
+    "run:webhook": "node scripts/run-webhook.js",
+    "test:persistence": "node scripts/test-persistence.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1"
+  }
+}
