@@ -1,0 +1,16 @@
+[Unit]
+Description=Q S2 Webhook Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/tmp/qs2_review
+ExecStart=/tmp/qs2_review/scripts/run-webhook-with-env.sh
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

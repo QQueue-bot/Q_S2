@@ -1,0 +1,14 @@
+[Unit]
+Description=Q S2 Cloudflare Tunnel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+ExecStart=/usr/local/bin/cloudflared tunnel run q-s2-webhook
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
