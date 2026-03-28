@@ -1,0 +1,24 @@
+How to run:
+
+  cd /tmp/qs2_review
+  ./scripts/test-public-webhook.sh
+
+Example successful output:
+
+{
+  "ok": true,
+  "validation": {
+    "ok": true,
+    "safeMode": true,
+    "errors": [],
+    "warnings": [],
+    "issues": []
+  },
+  "parsedSignal": {
+    "signal": "ENTER_LONG",
+    "botId": "Bot1",
+    "receivedAt": "2026-03-28T00:00:00.000Z",
+    "raw": "ENTER_LONG_Bot1"
+  },
+  "tradingEnabled": false
+}
