@@ -1,16 +1,11 @@
 #!/usr/bin/env node
-const fs = require('fs');
-const path = require('path');
-const { parseSignalPayload } = require('../src/signals/parseSignal');
+const { parseSignalString } = require('../src/signals/parseSignal');
 
-const settings = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'config', 'settings.json'), 'utf8'));
-const target = process.argv[2] || path.join(__dirname, '..', 'samples', 'signals', 'enter-long.valid.json');
-const payload = JSON.parse(fs.readFileSync(target, 'utf8'));
+const input = process.argv[2] || 'ENTER_LONG_Bot1';
+const allowedBots = ['Bot1'];
 
 try {
-  const parsed = parseSignalPayload(payload, {
-    allowedSymbols: settings.trading.allowedSymbols,
-  });
+  const parsed = parseSignalString(input, { allowedBots });
   console.log(JSON.stringify({ ok: true, parsed }, null, 2));
   process.exit(0);
 } catch (error) {

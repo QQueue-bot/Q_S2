@@ -1,7 +1,0 @@
-{
-  "signal": "ENTER_LONG",
-  "symbol": "BTCUSDT",
-  "source": "TradingView",
-  "strategy": "MDX",
-  "timeframe": "15m"
-}

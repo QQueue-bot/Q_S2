@@ -1,8 +1,0 @@
-{
-  "signal": "ENTER_LONG",
-  "symbol": "ETHUSDT",
-  "timestamp": "2026-03-27T23:58:00Z",
-  "source": "TradingView",
-  "strategy": "MDX",
-  "timeframe": "15m"
-}
