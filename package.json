@@ -7,9 +7,11 @@
     "validate:settings": "node scripts/validate-settings.js",
     "test:signal": "node scripts/test-parse-signal.js",
     "run:webhook": "node scripts/run-webhook.js",
-    "test:persistence": "node scripts/test-persistence.js"
+    "test:persistence": "node scripts/test-persistence.js",
+    "test:price": "node scripts/test-price-monitor.js"
   },
   "dependencies": {
-    "better-sqlite3": "^11.8.1"
+    "better-sqlite3": "^11.8.1",
+    "ws": "^8.18.0"
   }
 }

@@ -98,5 +98,11 @@
   "logging": {
     "level": "info"
   },
-  "configVersion": "1.0.0"
+  "configVersion": "1.0.0",
+  "priceMonitoring": {
+    "enabled": true,
+    "logEveryTick": true,
+    "samplingIntervalMs": 0,
+    "notes": "samplingIntervalMs can be raised later to reduce storage volume for longer-running deployments."
+  }
 }

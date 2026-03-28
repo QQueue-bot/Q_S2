@@ -42,6 +42,14 @@ function initSchema(db) {
       message TEXT NOT NULL,
       details_json TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS price_ticks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      received_at TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      last_price REAL NOT NULL,
+      source TEXT NOT NULL
+    );
   `);
 }
 
@@ -62,11 +70,28 @@ function buildPersistence(db) {
     )
   `);
 
+  const findRecentNormalizedSignalStmt = db.prepare(`
+    SELECT * FROM normalized_signals
+    WHERE signal = @signal
+      AND bot_id = @bot_id
+      AND received_at >= datetime('now', '-' || @window_seconds || ' seconds')
+    ORDER BY id DESC
+    LIMIT 1
+  `);
+
   const insertSystemEvent = db.prepare(`
     INSERT INTO system_events (
       created_at, level, event_type, message, details_json
     ) VALUES (
       @created_at, @level, @event_type, @message, @details_json
+    )
+  `);
+
+  const insertPriceTick = db.prepare(`
+    INSERT INTO price_ticks (
+      received_at, symbol, last_price, source
+    ) VALUES (
+      @received_at, @symbol, @last_price, @source
     )
   `);
 
@@ -77,11 +102,17 @@ function buildPersistence(db) {
     recordNormalizedSignal(signal) {
       return insertNormalizedSignal.run(signal);
     },
+    findRecentNormalizedSignal(params) {
+      return findRecentNormalizedSignalStmt.get(params) || null;
+    },
     recordSystemEvent(event) {
       return insertSystemEvent.run({
         ...event,
         details_json: event.details_json || null,
       });
+    },
+    recordPriceTick(tick) {
+      return insertPriceTick.run(tick);
     },
     getWebhookEvents() {
       return db.prepare('SELECT * FROM raw_webhook_events ORDER BY id ASC').all();
@@ -91,6 +122,9 @@ function buildPersistence(db) {
     },
     getSystemEvents() {
       return db.prepare('SELECT * FROM system_events ORDER BY id ASC').all();
+    },
+    getPriceTicks() {
+      return db.prepare('SELECT * FROM price_ticks ORDER BY id ASC').all();
     },
   };
 }

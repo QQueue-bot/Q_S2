@@ -34,7 +34,7 @@ function checkType(value, expected, objPath, issues) {
 function validateSettingsObject(settings) {
   const issues = [];
 
-  const topAllowed = ['configVersion', 'environment', 'trading', 'positionSizing', 'riskControls', 'takeProfit', 'stopLoss', 'breakEven', 'dca', 'storage', 'logging'];
+  const topAllowed = ['configVersion', 'environment', 'trading', 'positionSizing', 'riskControls', 'takeProfit', 'stopLoss', 'breakEven', 'dca', 'storage', 'logging', 'priceMonitoring'];
   checkType(settings, 'object', 'settings', issues);
   if (!isPlainObject(settings)) {
     return finalize(settings, issues);
@@ -148,6 +148,15 @@ function validateSettingsObject(settings) {
   if (isPlainObject(storage)) {
     checkUnknownKeys(storage, ['databasePath'], 'settings.storage', issues);
     if (typeof storage.databasePath !== 'string' || !storage.databasePath.trim()) addIssue(issues, 'error', 'settings.storage.databasePath', 'Must be a non-empty string');
+  }
+
+  const priceMonitoring = settings.priceMonitoring;
+  checkType(priceMonitoring, 'object', 'settings.priceMonitoring', issues);
+  if (isPlainObject(priceMonitoring)) {
+    checkUnknownKeys(priceMonitoring, ['enabled', 'logEveryTick', 'samplingIntervalMs', 'notes'], 'settings.priceMonitoring', issues);
+    if (typeof priceMonitoring.enabled !== 'boolean') addIssue(issues, 'error', 'settings.priceMonitoring.enabled', 'Must be boolean');
+    if (typeof priceMonitoring.logEveryTick !== 'boolean') addIssue(issues, 'error', 'settings.priceMonitoring.logEveryTick', 'Must be boolean');
+    if (typeof priceMonitoring.samplingIntervalMs !== 'number' || priceMonitoring.samplingIntervalMs < 0) addIssue(issues, 'error', 'settings.priceMonitoring.samplingIntervalMs', 'Must be >= 0');
   }
 
   const logging = settings.logging;
