@@ -19,6 +19,7 @@ function createBybitPriceMonitor(options = {}) {
   let samples = 0;
   let lastStoredAt = 0;
   let settled = false;
+  let latestTicker = null;
 
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(wsUrl);
@@ -55,9 +56,19 @@ function createBybitPriceMonitor(options = {}) {
         return;
       }
 
-      const tick = message?.data?.[0];
-      const lastPrice = tick?.lastPrice ? Number(tick.lastPrice) : null;
-      if (!tick || !lastPrice) return;
+      if (!message.topic || !message.data) {
+        return;
+      }
+
+      const incoming = Array.isArray(message.data) ? message.data[0] : message.data;
+      if (!incoming || incoming.symbol !== symbol) {
+        return;
+      }
+
+      latestTicker = { ...(latestTicker || {}), ...incoming };
+      const candidatePrice = latestTicker.lastPrice || latestTicker.markPrice || latestTicker.indexPrice;
+      const parsedPrice = candidatePrice ? Number(candidatePrice) : null;
+      if (!parsedPrice) return;
 
       const now = Date.now();
       const shouldStore = priceMonitoring.logEveryTick || !priceMonitoring.samplingIntervalMs || (now - lastStoredAt >= priceMonitoring.samplingIntervalMs);
@@ -66,12 +77,12 @@ function createBybitPriceMonitor(options = {}) {
         persistence.recordPriceTick({
           received_at: receivedAt,
           symbol,
-          last_price: lastPrice,
+          last_price: parsedPrice,
           source: 'bybit_testnet',
         });
         lastStoredAt = now;
         samples += 1;
-        logger.info('Stored price tick', { symbol, lastPrice, receivedAt, samples });
+        logger.info('Stored price tick', { symbol, parsedPrice, receivedAt, samples });
       }
 
       if (samples >= sampleLimit) {
