@@ -7,7 +7,13 @@ const { loadAndValidateSettings } = require('../config/validateSettings');
 const { resolveBotContext } = require('../config/resolveBotContext');
 const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite');
 
-const BYBIT_DEMO_BASE_URL = 'https://api-demo.bybit.com';
+const DEFAULT_BYBIT_BASE_URL = 'https://api-demo.bybit.com';
+
+function getBybitBaseUrl(options = {}) {
+  if (options.bybitBaseUrl) return options.bybitBaseUrl;
+  if (process.env.BYBIT_BASE_URL) return process.env.BYBIT_BASE_URL;
+  return DEFAULT_BYBIT_BASE_URL;
+}
 
 function loadProjectEnv(envPath) {
   if (fs.existsSync(envPath)) {
@@ -55,8 +61,9 @@ function computeOrderSizing({ maxMarginUsd, accountPercent, leverage, referenceP
   };
 }
 
-async function getInstrumentInfo(symbol) {
-  const response = await axios.get(`${BYBIT_DEMO_BASE_URL}/v5/market/instruments-info?category=linear&symbol=${symbol}`);
+async function getInstrumentInfo(symbol, options = {}) {
+  const baseUrl = getBybitBaseUrl(options);
+  const response = await axios.get(`${baseUrl}/v5/market/instruments-info?category=linear&symbol=${symbol}`);
   const instrument = response.data?.result?.list?.[0];
   if (!instrument) {
     throw new Error(`Instrument info not found for ${symbol}`);
@@ -69,7 +76,7 @@ function signRequest({ apiKey, apiSecret, timestamp, recvWindow, query = '', bod
   return crypto.createHmac('sha256', apiSecret).update(payloadToSign).digest('hex');
 }
 
-async function bybitPrivateGet(pathname, query, credentials) {
+async function bybitPrivateGet(pathname, query, credentials, options = {}) {
   const timestamp = Date.now().toString();
   const recvWindow = '5000';
   const signature = signRequest({
@@ -79,7 +86,8 @@ async function bybitPrivateGet(pathname, query, credentials) {
     recvWindow,
     query,
   });
-  const response = await axios.get(`${BYBIT_DEMO_BASE_URL}${pathname}?${query}`, {
+  const baseUrl = getBybitBaseUrl(options);
+  const response = await axios.get(`${baseUrl}${pathname}?${query}`, {
     headers: {
       'X-BAPI-API-KEY': credentials.apiKey,
       'X-BAPI-TIMESTAMP': timestamp,
@@ -91,7 +99,7 @@ async function bybitPrivateGet(pathname, query, credentials) {
   return response.data;
 }
 
-async function bybitPrivatePost(pathname, bodyObject, credentials) {
+async function bybitPrivatePost(pathname, bodyObject, credentials, options = {}) {
   const timestamp = Date.now().toString();
   const recvWindow = '5000';
   const body = JSON.stringify(bodyObject);
@@ -102,7 +110,8 @@ async function bybitPrivatePost(pathname, bodyObject, credentials) {
     recvWindow,
     body,
   });
-  const response = await fetch(`${BYBIT_DEMO_BASE_URL}${pathname}`, {
+  const baseUrl = getBybitBaseUrl(options);
+  const response = await fetch(`${baseUrl}${pathname}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -119,8 +128,8 @@ async function bybitPrivatePost(pathname, bodyObject, credentials) {
   };
 }
 
-async function getLivePosition(symbol, credentials) {
-  const response = await bybitPrivateGet('/v5/position/list', `category=linear&symbol=${symbol}`, credentials);
+async function getLivePosition(symbol, credentials, options = {}) {
+  const response = await bybitPrivateGet('/v5/position/list', `category=linear&symbol=${symbol}`, credentials, options);
   const positions = response?.result?.list || [];
   return positions.find(position => Number(position.size || 0) > 0) || null;
 }
@@ -129,7 +138,7 @@ function isOppositePosition(signal, positionSide) {
   return (signal === 'ENTER_LONG' && positionSide === 'Sell') || (signal === 'ENTER_SHORT' && positionSide === 'Buy');
 }
 
-async function closeOppositePosition({ symbol, parsedSignal, livePosition, credentials, persistence }) {
+async function closeOppositePosition({ symbol, parsedSignal, livePosition, credentials, persistence, bybitBaseUrl }) {
   const closeSide = livePosition.side === 'Buy' ? 'Sell' : 'Buy';
   const closePayload = {
     category: 'linear',
@@ -141,7 +150,7 @@ async function closeOppositePosition({ symbol, parsedSignal, livePosition, crede
     reduceOnly: true,
   };
 
-  const result = await bybitPrivatePost('/v5/order/create', closePayload, credentials);
+  const result = await bybitPrivatePost('/v5/order/create', closePayload, credentials, { bybitBaseUrl });
   persistence.recordOrderAttempt({
     created_at: new Date().toISOString(),
     signal: `${parsedSignal.signal}_CLOSE_FIRST`,
@@ -294,8 +303,8 @@ function resolvePersistence(options, settingsPath, settings) {
   return { dbPath: fallbackDbPath, db, persistence: buildPersistence(db) };
 }
 
-async function executeCloseOrder({ symbol, botId, livePosition, closePercent, exitReason, triggerPercent, credentials, persistence }) {
-  const instrument = await getInstrumentInfo(symbol);
+async function executeCloseOrder({ symbol, botId, livePosition, closePercent, exitReason, triggerPercent, credentials, persistence, bybitBaseUrl }) {
+  const instrument = await getInstrumentInfo(symbol, { bybitBaseUrl });
   const qtyStep = Number(instrument.lotSizeFilter.qtyStep);
   const requestedQty = closePercent >= 100 ? Number(livePosition.size).toFixed(decimalPlaces(qtyStep)) : computeCloseQty(livePosition.size, closePercent, qtyStep);
   const closeSide = livePosition.side === 'Buy' ? 'Sell' : 'Buy';
@@ -308,7 +317,7 @@ async function executeCloseOrder({ symbol, botId, livePosition, closePercent, ex
     positionIdx: 0,
     reduceOnly: true,
   };
-  const result = await bybitPrivatePost('/v5/order/create', payload, credentials);
+  const result = await bybitPrivatePost('/v5/order/create', payload, credentials, { bybitBaseUrl });
   persistence.recordExitEvent({
     created_at: new Date().toISOString(),
     bot_id: botId || 'Bot1',
@@ -332,7 +341,7 @@ async function executeCloseOrder({ symbol, botId, livePosition, closePercent, ex
   };
 }
 
-async function submitEntryOrder({ symbol, side, qty, botId, signal, notionalUsd, credentials, persistence, stageName = 'initial_entry' }) {
+async function submitEntryOrder({ symbol, side, qty, botId, signal, notionalUsd, credentials, persistence, stageName = 'initial_entry', bybitBaseUrl }) {
   const entryPayload = {
     category: 'linear',
     symbol,
@@ -342,7 +351,7 @@ async function submitEntryOrder({ symbol, side, qty, botId, signal, notionalUsd,
     positionIdx: 0,
   };
 
-  const entryResult = await bybitPrivatePost('/v5/order/create', entryPayload, credentials);
+  const entryResult = await bybitPrivatePost('/v5/order/create', entryPayload, credentials, { bybitBaseUrl });
   const responseJson = entryResult.json;
   persistence.recordOrderAttempt({
     created_at: new Date().toISOString(),
@@ -368,20 +377,21 @@ async function executePaperTrade(parsedSignal, options = {}) {
   const envPath = options.envPath || path.join(__dirname, '..', '..', '.env');
   loadProjectEnv(envPath);
 
-  const apiKey = process.env.BYBIT_TESTNET_API_KEY;
-  const apiSecret = process.env.BYBIT_TESTNET_API_SECRET;
+  const botContext = options.botContext || resolveBotContext(parsedSignal.botId, { envPath });
+  const apiKey = botContext.credentials.apiKey;
+  const apiSecret = botContext.credentials.apiSecret;
   if (!apiKey || !apiSecret) {
-    throw new Error('Missing BYBIT_TESTNET_API_KEY or BYBIT_TESTNET_API_SECRET in project .env');
+    throw new Error(`Missing resolved live credentials for ${parsedSignal.botId}`);
   }
 
-  const botContext = options.botContext || resolveBotContext(parsedSignal.botId);
   const { settings } = loadAndValidateSettings(settingsPath);
   const { dbPath, persistence } = resolvePersistence(options, settingsPath, settings);
 
   const symbol = botContext.symbol;
   const side = sideFromSignal(parsedSignal.signal);
+  const bybitBaseUrl = options.bybitBaseUrl || 'https://api.bybit.com';
   const credentials = { apiKey, apiSecret };
-  const livePosition = await getLivePosition(symbol, credentials);
+  const livePosition = await getLivePosition(symbol, credentials, { bybitBaseUrl });
   let reversal = null;
 
   if (livePosition && isOppositePosition(parsedSignal.signal, livePosition.side)) {
@@ -391,6 +401,7 @@ async function executePaperTrade(parsedSignal, options = {}) {
       livePosition,
       credentials,
       persistence,
+      bybitBaseUrl,
     });
     reversal = {
       detected: true,
@@ -415,7 +426,7 @@ async function executePaperTrade(parsedSignal, options = {}) {
     throw new Error('No stored price tick available for sizing');
   }
 
-  const instrument = await getInstrumentInfo(symbol);
+  const instrument = await getInstrumentInfo(symbol, { bybitBaseUrl });
   const lot = instrument.lotSizeFilter;
   const sizing = computeOrderSizing({
     maxMarginUsd: 5000,
@@ -443,6 +454,7 @@ async function executePaperTrade(parsedSignal, options = {}) {
     credentials,
     persistence,
     stageName: 'initial_entry_50',
+    bybitBaseUrl,
   });
   persistence.recordStagedEntryEvent({
     created_at: new Date().toISOString(),
@@ -487,6 +499,7 @@ async function executePaperTrade(parsedSignal, options = {}) {
         credentials,
         persistence,
         stageName: 'delayed_entry_50',
+        bybitBaseUrl,
       });
       persistence.recordStagedEntryEvent({
         created_at: new Date().toISOString(),
@@ -522,22 +535,23 @@ async function executePaperTrade(parsedSignal, options = {}) {
 }
 
 async function manageBreakEven(options = {}) {
-  const botContext = options.botContext || resolveBotContext(options.botId || 'Bot1');
+  const envPath = options.envPath || '/home/ubuntu/.openclaw/.env';
+  const botContext = options.botContext || resolveBotContext(options.botId || 'Bot1', { envPath });
   const settingsPath = options.settingsPath || botContext.settingsPath || path.join(__dirname, '..', '..', 'config', 'settings.json');
-  const envPath = options.envPath || path.join(__dirname, '..', '..', '.env');
   loadProjectEnv(envPath);
 
-  const apiKey = process.env.BYBIT_TESTNET_API_KEY;
-  const apiSecret = process.env.BYBIT_TESTNET_API_SECRET;
+  const apiKey = botContext.credentials.apiKey;
+  const apiSecret = botContext.credentials.apiSecret;
   if (!apiKey || !apiSecret) {
-    throw new Error('Missing BYBIT_TESTNET_API_KEY or BYBIT_TESTNET_API_SECRET in project .env');
+    throw new Error(`Missing resolved live credentials for ${botContext.botId}`);
   }
 
   const { settings } = loadAndValidateSettings(settingsPath);
   const { dbPath, persistence } = resolvePersistence(options, settingsPath, settings);
   const symbol = botContext.symbol;
+  const bybitBaseUrl = options.bybitBaseUrl || 'https://api.bybit.com';
   const credentials = { apiKey, apiSecret };
-  const livePosition = options.livePositionOverride || await getLivePosition(symbol, credentials);
+  const livePosition = options.livePositionOverride || await getLivePosition(symbol, credentials, { bybitBaseUrl });
   if (!livePosition) {
     return { ok: true, action: 'no_position', dbPath };
   }
@@ -571,6 +585,7 @@ async function manageBreakEven(options = {}) {
     triggerPercent: decision.triggerPercent,
     credentials,
     persistence,
+    bybitBaseUrl,
   });
   persistence.recordBreakEvenEvent({
     created_at: new Date().toISOString(),
@@ -594,22 +609,23 @@ async function manageBreakEven(options = {}) {
 }
 
 async function manageTpSl(options = {}) {
-  const botContext = options.botContext || resolveBotContext(options.botId || 'Bot1');
+  const envPath = options.envPath || '/home/ubuntu/.openclaw/.env';
+  const botContext = options.botContext || resolveBotContext(options.botId || 'Bot1', { envPath });
   const settingsPath = options.settingsPath || botContext.settingsPath || path.join(__dirname, '..', '..', 'config', 'settings.json');
-  const envPath = options.envPath || path.join(__dirname, '..', '..', '.env');
   loadProjectEnv(envPath);
 
-  const apiKey = process.env.BYBIT_TESTNET_API_KEY;
-  const apiSecret = process.env.BYBIT_TESTNET_API_SECRET;
+  const apiKey = botContext.credentials.apiKey;
+  const apiSecret = botContext.credentials.apiSecret;
   if (!apiKey || !apiSecret) {
-    throw new Error('Missing BYBIT_TESTNET_API_KEY or BYBIT_TESTNET_API_SECRET in project .env');
+    throw new Error(`Missing resolved live credentials for ${botContext.botId}`);
   }
 
   const { settings } = loadAndValidateSettings(settingsPath);
   const { dbPath, persistence } = resolvePersistence(options, settingsPath, settings);
   const symbol = botContext.symbol;
+  const bybitBaseUrl = options.bybitBaseUrl || 'https://api.bybit.com';
   const credentials = { apiKey, apiSecret };
-  const livePosition = options.livePositionOverride || await getLivePosition(symbol, credentials);
+  const livePosition = options.livePositionOverride || await getLivePosition(symbol, credentials, { bybitBaseUrl });
   if (!livePosition) {
     return { ok: true, action: 'no_position', dbPath };
   }
@@ -628,6 +644,7 @@ async function manageTpSl(options = {}) {
     triggerPercent: decision.triggerPercent,
     credentials,
     persistence,
+    bybitBaseUrl,
   });
 
   return {

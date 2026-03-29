@@ -114,20 +114,21 @@ Before multiple bots exist, persistence must be ready to separate them cleanly.
 
 ---
 
-### Sprint C4 - Dashboard Multi-Bot Readiness
+### Sprint C4 - Bot Aware Execution Routing
 **Objective**
-Prepare the dashboard to represent multiple bots without yet fully implementing all 8.
+Make execution use resolved bot context instead of hardcoded/global defaults.
 
 **Work**
-- add bot labels where needed
-- make panels bot-aware in structure
-- prepare room for more than one bot state
+- resolve bot context before execution
+- source symbol from bot registry/config
+- pass bot-aware context into execution functions
+- remove remaining hardcoded Bot1 / BTCUSDT assumptions from the active execution path
 
 **Output**
-- multi-bot-ready observability structure
+- bot-aware execution path
 
 **Why now**
-This keeps the operator interface aligned with the architecture as it evolves.
+This turns the architecture work from passive config readiness into an active bot-routed execution path.
 
 ---
 
@@ -150,18 +151,20 @@ This is the point where the available Bybit subaccount API keys become structura
 
 ### Sprint C6 - Single Subaccount Routing Test
 **Objective**
-Prove the system can route one bot to one specific subaccount cleanly.
+Prove that Bot1 can route through its true live credential pair safely, while preserving operator control through per-bot enable/disable enforcement.
 
 **Work**
-- use one bot/account pair
-- route execution using mapped credentials
-- verify events and trades land in the intended subaccount
+- route Bot1 using its true live credential pair
+- switch preflight auth/account validation from demo assumptions to live Bybit endpoints
+- wire execution to use resolved live bot credentials instead of shared default credentials
+- verify each bot's enabled/disabled state is enforced in the active execution path
+- verify Bot1 execution and management continue working with mapped live credentials
 
 **Output**
-- first true bot/account routed execution
+- first true live bot/account routed execution
 
 **Why this is later**
-This is the first higher-friction external/account sprint and should only happen after the config/mapping model is clean.
+This is the first higher-friction external/account sprint and should only happen after the config/mapping model is clean and bot-level operator control is in place.
 
 ---
 
@@ -246,7 +249,7 @@ They should not drive the earliest architecture sprints prematurely.
 1. C1 - Bot Registry Model
 2. C2 - Bot-Aware Settings Resolution
 3. C3 - Bot-Aware Persistence
-4. C4 - Dashboard Multi-Bot Readiness
+4. C4 - Bot Aware Execution Routing
 5. C5 - Bot Credential Mapping Model
 6. C6 - Single Subaccount Routing Test
 7. C7 - Expand Mapping to 8 Bots
@@ -261,9 +264,9 @@ By the end of Milestone C, S2 should have:
 - a formal bot registry
 - bot-specific settings resolution
 - bot-aware persistence
-- dashboard structure ready for multiple bots
+- bot-aware execution routing
 - bot-to-account credential mapping structure
-- one proven routed execution into a chosen subaccount
+- one proven routed execution into Bot1's chosen live account with bot-level enable/disable enforcement
 - 8-bot mapping readiness
 - a clear readiness review for the next milestone
 

@@ -11,7 +11,7 @@ function resolveBotContext(botId, options = {}) {
   const resolved = resolveBotSettings(botId, { registryPath });
   const credentials = resolveBotCredentials(botId, {
     registryPath,
-    envPath: options.envPath,
+    envPath: options.envPath || '/home/ubuntu/.openclaw/.env',
   });
   if (!resolved.bot.enabled) {
     throw new Error(`Bot ${botId} is disabled`);

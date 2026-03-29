@@ -40,8 +40,8 @@ function parseSignalString(rawSignal, options = {}) {
   }
 
   const botId = normalizeBotToken(botPart);
-  const allowedBots = options.allowedBots || [];
-  if (Array.isArray(allowedBots) && allowedBots.length > 0 && !allowedBots.includes(botId)) {
+  const allowedBots = options.allowedBots;
+  if (Array.isArray(allowedBots) && !allowedBots.includes(botId)) {
     throw new Error(`Bot is not allowed: ${botId}`);
   }
 

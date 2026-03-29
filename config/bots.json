@@ -6,8 +6,8 @@
       "symbol": "BTCUSDT",
       "settingsRef": "./settings.json",
       "credentialRef": {
-        "apiKeyEnv": "BYBIT_TESTNET_API_KEY",
-        "apiSecretEnv": "BYBIT_TESTNET_API_SECRET"
+        "apiKeyEnv": "S2_BOT1_API_KEY",
+        "apiSecretEnv": "S2_BOT1_API_SECRET"
       },
       "notes": "Initial concrete registry entry for Milestone C with env-backed credential references"
     }

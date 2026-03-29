@@ -13,7 +13,7 @@ function loadEnv(envPath) {
 
 function resolveBotCredentials(botId, options = {}) {
   const registryPath = options.registryPath || path.join(__dirname, '..', '..', 'config', 'bots.json');
-  const envPath = options.envPath || '/home/ubuntu/.openclaw/workspace/.env';
+  const envPath = options.envPath || '/home/ubuntu/.openclaw/.env';
   const bot = getBotById(botId, registryPath);
 
   if (!bot) {

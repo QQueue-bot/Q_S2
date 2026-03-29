@@ -75,7 +75,7 @@ function createWebhookServer(options = {}) {
               const execution = await executePaperTrade(parsedSignal, {
                 settingsPath: botContext.settingsPath,
                 botContext,
-                envPath: '/home/ubuntu/.openclaw/workspace/.env',
+                envPath: '/home/ubuntu/.openclaw/.env',
               });
               logger.info('Execution result', { execution });
             } catch (executionError) {
