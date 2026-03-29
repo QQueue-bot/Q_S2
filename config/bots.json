@@ -1,0 +1,11 @@
+{
+  "bots": [
+    {
+      "botId": "Bot1",
+      "enabled": true,
+      "symbol": "BTCUSDT",
+      "settingsRef": "./settings.json",
+      "notes": "Initial concrete registry entry for Milestone C"
+    }
+  ]
+}
