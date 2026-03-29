@@ -222,6 +222,81 @@ function renderExecutionTimeline(events = []) {
   return `<div class="signal-list">${items}</div>`;
 }
 
+function loadHealthState(runtime) {
+  const state = {
+    runtimePath: runtime.path || '/tmp/qs2_review',
+    tradingEnabled: null,
+    configValid: null,
+    validationSafeMode: null,
+    webhookService: 'unknown',
+    tunnelStatus: 'unknown',
+    lastSignalTime: null,
+    lastExecutionTime: null,
+  };
+
+  try {
+    const settingsPath = runtime.settingsPath || '/tmp/qs2_review/config/settings.json';
+    const settings = JSON.parse(require('fs').readFileSync(settingsPath, 'utf8'));
+    state.tradingEnabled = settings.trading?.enabled === true;
+  } catch {}
+
+  try {
+    const { validation } = require('../config/validateSettings').loadAndValidateSettings(runtime.settingsPath || '/tmp/qs2_review/config/settings.json');
+    state.configValid = validation.ok;
+    state.validationSafeMode = validation.safeMode;
+  } catch {
+    state.configValid = false;
+  }
+
+  try {
+    const db = new Database(runtime.dbPath || '/tmp/qs2_review/data/s2.sqlite', { readonly: true });
+    const latestSignal = db.prepare("SELECT MAX(created_at) AS ts FROM order_attempts").get();
+    const latestExecution = db.prepare("SELECT MAX(created_at) AS ts FROM staged_entry_events").get();
+    state.lastSignalTime = latestSignal?.ts || null;
+    state.lastExecutionTime = latestExecution?.ts || null;
+    db.close();
+  } catch {}
+
+  try {
+    const { execSync } = require('child_process');
+    const webhook = execSync('systemctl is-active q-s2-webhook || true', { encoding: 'utf8' }).trim();
+    const tunnel = execSync('systemctl is-active q-s2-tunnel || true', { encoding: 'utf8' }).trim();
+    state.webhookService = webhook || 'unknown';
+    state.tunnelStatus = tunnel || 'unknown';
+  } catch {}
+
+  const healthy = state.webhookService === 'active'
+    && state.configValid === true
+    && state.tradingEnabled === true;
+  const warning = state.webhookService === 'active' && state.configValid === true;
+  state.overallHealth = healthy ? 'Healthy' : (warning ? 'Warning' : 'Attention needed');
+
+  return state;
+}
+
+function renderHealthPanel(health) {
+  const overallClass = health.overallHealth === 'Healthy' ? 'status-success'
+    : health.overallHealth === 'Warning' ? 'status-skipped'
+    : 'status-failed';
+  const boolLabel = value => value === true ? '<code class="status-success">yes</code>' : value === false ? '<code class="status-failed">no</code>' : '<code class="status-neutral">unknown</code>';
+  const serviceLabel = value => value === 'active' ? '<code class="status-success">active</code>' : `<code class="status-failed">${value || 'unknown'}</code>`;
+
+  return `
+    <div class="signal-item">
+      <div><strong>Overall Health</strong></div>
+      <div><code class="${overallClass}">${health.overallHealth}</code></div>
+      <div><span class="label">Runtime Path:</span> <code>${health.runtimePath}</code></div>
+      <div><span class="label">Trading Enabled:</span> ${boolLabel(health.tradingEnabled)}</div>
+      <div><span class="label">Config Valid:</span> ${boolLabel(health.configValid)}</div>
+      <div><span class="label">Safe Mode:</span> ${boolLabel(health.validationSafeMode)}</div>
+      <div><span class="label">Webhook Service:</span> ${serviceLabel(health.webhookService)}</div>
+      <div><span class="label">Tunnel Service:</span> ${serviceLabel(health.tunnelStatus)}</div>
+      <div><span class="label">Last Signal:</span> <code>${health.lastSignalTime || 'n/a'}</code></div>
+      <div><span class="label">Last Execution:</span> <code>${health.lastExecutionTime || 'n/a'}</code></div>
+    </div>
+  `;
+}
+
 function renderPositionPanel(positionState = {}) {
   const { position, orders = [], error } = positionState;
   if (error) {
@@ -256,7 +331,7 @@ function renderPositionPanel(positionState = {}) {
   return `${positionHtml}<div style="height:12px"></div>${ordersHtml}`;
 }
 
-function renderDashboardHtml({ title = 'S2 Dashboard', runtime = {}, signals = [], positionState = {}, executionEvents = [], latestSummary = null } = {}) {
+function renderDashboardHtml({ title = 'S2 Dashboard', runtime = {}, signals = [], positionState = {}, executionEvents = [], latestSummary = null, healthState = null } = {}) {
   const sections = [
     {
       id: 'signals',
@@ -281,7 +356,7 @@ function renderDashboardHtml({ title = 'S2 Dashboard', runtime = {}, signals = [
     {
       id: 'health',
       title: 'Runtime Health',
-      body: 'Placeholder for Sprint B6 bot/runtime health panel.',
+      body: renderHealthPanel(healthState),
     },
   ];
 
@@ -433,8 +508,13 @@ function createDashboardServer(options = {}) {
       dbPath: signalDbPath,
       settingsPath: runtime.settingsPath || '/tmp/qs2_review/config/settings.json',
     });
+    const healthState = loadHealthState({
+      dbPath: signalDbPath,
+      settingsPath: runtime.settingsPath || '/tmp/qs2_review/config/settings.json',
+      path: runtime.path || '/tmp/qs2_review',
+    });
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(renderDashboardHtml({ title, runtime, signals, positionState, executionEvents, latestSummary }));
+    res.end(renderDashboardHtml({ title, runtime, signals, positionState, executionEvents, latestSummary, healthState }));
   });
 
   return {
