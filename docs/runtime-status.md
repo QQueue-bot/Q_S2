@@ -74,6 +74,18 @@ The following were directly verified:
 - Bybit demo paper-trade execution succeeded with `retCode: 0`
 - order attempts were present in the live runtime SQLite DB under `/tmp/qs2_review/data/s2.sqlite`
 
+## Config handling decision
+
+During Sprint 10 Recap, the live `/tmp/qs2_review/config/settings.json` was reviewed and compared with the repo copy.
+
+Decision:
+
+- keep repo `config/settings.json` as the conservative/default baseline
+- do not blindly sync the live testing-enabled runtime config into Git
+- treat the live `/tmp/qs2_review/config/settings.json` as a testing-only runtime variant unless/until a future sprint explicitly decides otherwise
+
+This keeps Git review safer while still preserving the fact that the live runtime used a more permissive config during testing.
+
 ## Drift / continuity warning
 
 The live runtime under `/tmp/qs2_review` has local modifications not yet fully reflected in the workspace repo clone.

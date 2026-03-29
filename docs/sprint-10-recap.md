@@ -113,7 +113,7 @@ Likely update candidates identified during recap:
 - selected Bybit/debug helper scripts after review
 - runtime/deployment docs
 
-`config/settings.json` requires deliberate review before syncing, because the live runtime config is more permissive than the workspace clone and should not be promoted blindly.
+`config/settings.json` required deliberate review because the live runtime config was more permissive than the workspace clone. Sprint 10 Recap resolution: keep the repo `config/settings.json` as the conservative baseline for now, and treat the live `/tmp/qs2_review/config/settings.json` as a testing-only runtime variant that should be documented, not blindly promoted.
 
 ## What should remain out of Git
 
@@ -139,12 +139,14 @@ Every sprint should end with a small closeout step that captures:
 
 This is now important enough to treat as part of the definition of done.
 
+## Recap conclusion
+
+Sprint 10 Recap verified that the end-to-end paper-trade path works: public webhook ingress, TradingView-style signal handling, Bybit demo execution, persistence, and persistent runtime services were all observed working.
+
+The recap also repaired continuity by updating GitHub docs/process, syncing conservative code changes from the live runtime, and updating memory.
+
+Final config decision for this recap: keep the repo `config/settings.json` as the conservative baseline for future review, and document the live `/tmp/qs2_review/config/settings.json` as a testing-only runtime variant rather than promoting it blindly.
+
 ## Next recommended step
 
-Before syncing live runtime changes back into GitHub, review the live `/tmp/qs2_review` diffs carefully and classify them as:
-
-- clearly part of the intended tested working state
-- temporary diagnostics
-- intentionally incomplete/testing-only behavior
-
-Only then should the repo be updated in staged, reviewable commits.
+With Sprint 10 Recap complete, the next work should be chosen intentionally from the backlog/current priorities rather than inferred from the temporary runtime alone.
