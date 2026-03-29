@@ -1,11 +1,63 @@
 const http = require('http');
+const Database = require('better-sqlite3');
 
-function renderDashboardHtml({ title = 'S2 Dashboard', runtime = {} } = {}) {
+function loadRecentSignals(dbPath) {
+  try {
+    const db = new Database(dbPath, { readonly: true });
+    const hasNormalizedSignals = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='normalized_signals'").get();
+    const hasOrderAttempts = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='order_attempts'").get();
+
+    let signals = [];
+    if (hasNormalizedSignals) {
+      signals = db.prepare(`
+        SELECT received_at AS timestamp, raw_input AS rawSignal, signal AS parsedSignal, bot_id AS botId, 'received' AS status
+        FROM normalized_signals
+        ORDER BY id DESC
+        LIMIT 10
+      `).all();
+    }
+
+    if (signals.length === 0 && hasOrderAttempts) {
+      signals = db.prepare(`
+        SELECT created_at AS timestamp, signal AS rawSignal, signal AS parsedSignal, bot_id AS botId,
+               CASE WHEN status = 'submitted' THEN 'actionable' ELSE status END AS status
+        FROM order_attempts
+        ORDER BY id DESC
+        LIMIT 10
+      `).all();
+    }
+
+    db.close();
+    return signals;
+  } catch {
+    return [];
+  }
+}
+
+function renderSignalFeed(signals = []) {
+  if (!signals.length) {
+    return '<p>No recent signals found yet.</p>';
+  }
+
+  const items = signals.map(signal => `
+    <div class="signal-item">
+      <div><strong>${signal.timestamp || 'unknown time'}</strong></div>
+      <div><span class="label">Raw:</span> <code>${signal.rawSignal || 'n/a'}</code></div>
+      <div><span class="label">Parsed:</span> <code>${signal.parsedSignal || 'n/a'}</code></div>
+      <div><span class="label">Bot:</span> <code>${signal.botId || 'n/a'}</code></div>
+      <div><span class="label">Status:</span> <code>${signal.status || 'unknown'}</code></div>
+    </div>
+  `).join('\n');
+
+  return `<div class="signal-list">${items}</div>`;
+}
+
+function renderDashboardHtml({ title = 'S2 Dashboard', runtime = {}, signals = [] } = {}) {
   const sections = [
     {
       id: 'signals',
       title: 'Recent Signals',
-      body: 'Placeholder for Sprint B2 signal feed panel.',
+      body: renderSignalFeed(signals),
     },
     {
       id: 'positions',
@@ -32,7 +84,7 @@ function renderDashboardHtml({ title = 'S2 Dashboard', runtime = {} } = {}) {
   const cards = sections.map(section => `
     <section class="card" id="${section.id}">
       <h2>${section.title}</h2>
-      <p>${section.body}</p>
+      <div class="card-body">${section.body}</div>
     </section>
   `).join('\n');
 
@@ -74,6 +126,25 @@ function renderDashboardHtml({ title = 'S2 Dashboard', runtime = {} } = {}) {
       padding: 16px;
       min-height: 140px;
     }
+    .card-body {
+      color: #cbd5e1;
+      line-height: 1.5;
+    }
+    .signal-list {
+      display: grid;
+      gap: 10px;
+    }
+    .signal-item {
+      border: 1px solid #1f2937;
+      border-radius: 10px;
+      padding: 10px;
+      background: #0f172a;
+      display: grid;
+      gap: 4px;
+    }
+    .label {
+      color: #93c5fd;
+    }
     h1, h2, p { margin: 0; }
     h1 { font-size: 28px; }
     h2 { font-size: 16px; margin-bottom: 10px; }
@@ -107,6 +178,8 @@ function createDashboardServer(options = {}) {
     logger = console,
   } = options;
 
+  const signalDbPath = runtime.dbPath || '/tmp/qs2_review/data/s2.sqlite';
+
   const server = http.createServer((req, res) => {
     if (req.method !== 'GET') {
       res.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -120,8 +193,9 @@ function createDashboardServer(options = {}) {
       return;
     }
 
+    const signals = loadRecentSignals(signalDbPath);
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(renderDashboardHtml({ title, runtime }));
+    res.end(renderDashboardHtml({ title, runtime, signals }));
   });
 
   return {
