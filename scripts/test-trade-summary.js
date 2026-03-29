@@ -5,6 +5,7 @@ const { generateTradeSummary } = require('../src/reporting/tradeSummary');
 generateTradeSummary({
   settingsPath: path.join(__dirname, '..', 'config', 'settings.json'),
   envPath: '/home/ubuntu/.openclaw/workspace/.env',
+  dbPath: process.env.S2_DB_PATH,
 }).then((summary) => {
   console.log(JSON.stringify(summary, null, 2));
   process.exit(0);

@@ -12,6 +12,28 @@ function loadProjectEnv(envPath) {
   }
 }
 
+function safeJsonParse(value) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function formatPositionSummary(position) {
+  if (!position) {
+    return 'Current position: unavailable';
+  }
+  return `Current position: side=${position.side || 'flat'}, size=${position.size}, avgPrice=${position.avgPrice || 'n/a'}, markPrice=${position.markPrice || 'n/a'}, unrealisedPnl=${position.unrealisedPnl || 'n/a'}`;
+}
+
+function formatOpenOrderSummary(order) {
+  if (!order) {
+    return 'Open order: none';
+  }
+  return `Open order: ${order.orderId} status=${order.orderStatus}`;
+}
+
 function sign(apiKey, apiSecret, query = '') {
   const timestamp = Date.now().toString();
   const recvWindow = '5000';
@@ -45,15 +67,35 @@ async function generateTradeSummary(options = {}) {
   }
 
   const { settings } = loadAndValidateSettings(settingsPath);
-  const dbPath = path.resolve(path.dirname(settingsPath), '..', settings.storage.databasePath.replace(/^\.\//, ''));
-  const db = createDatabase(dbPath);
-  initSchema(db);
-  const persistence = buildPersistence(db);
+  const configuredDbPath = path.resolve(path.dirname(settingsPath), '..', settings.storage.databasePath.replace(/^\.\//, ''));
+  const candidateDbPaths = [
+    options.dbPath,
+    process.env.S2_DB_PATH,
+    configuredDbPath,
+    '/tmp/qs2_review/data/s2.sqlite',
+  ].filter(Boolean);
 
-  const attempts = persistence.getOrderAttempts();
-  const latest = attempts.slice(-1)[0];
+  let latest = null;
+  let resolvedDbPath = null;
+  let attempts = [];
+
+  for (const candidate of candidateDbPaths) {
+    const dbPath = path.resolve(candidate);
+    const db = createDatabase(dbPath);
+    initSchema(db);
+    const persistence = buildPersistence(db);
+    const foundAttempts = persistence.getOrderAttempts();
+    const mostRecent = foundAttempts.slice(-1)[0] || null;
+    if (mostRecent) {
+      latest = mostRecent;
+      attempts = foundAttempts;
+      resolvedDbPath = dbPath;
+      break;
+    }
+  }
+
   if (!latest) {
-    throw new Error('No order attempts found to summarize');
+    throw new Error(`No order attempts found to summarize in candidate DB paths: ${candidateDbPaths.join(', ')}`);
   }
 
   const symbol = latest.symbol;
@@ -63,8 +105,15 @@ async function generateTradeSummary(options = {}) {
 
   const position = positions?.result?.list?.[0] || null;
   const liveOrder = orders?.result?.list?.[0] || null;
+  const latestOrderResponse = safeJsonParse(latest.response_json);
+  const recentAttempts = attempts.slice(-10);
+  const recentSignals = recentAttempts.map(x => x.signal);
+  const distinctRecentSignals = [...new Set(recentSignals)];
+  const recentSignalFlips = recentSignals.slice(1).reduce((count, signal, index) => {
+    return count + (signal !== recentSignals[index] ? 1 : 0);
+  }, 0);
 
-  const jsonSummary = {
+  const trade = {
     botId: latest.bot_id,
     symbol,
     signal: latest.signal,
@@ -74,52 +123,88 @@ async function generateTradeSummary(options = {}) {
     orderQty: latest.qty,
     notionalUsd: latest.notional_usd,
     createdAt: latest.created_at,
-    latestOrderResponse: JSON.parse(latest.response_json),
-    currentPosition: position ? {
-      symbol: position.symbol,
-      side: position.side,
-      size: position.size,
-      avgPrice: position.avgPrice,
-      markPrice: position.markPrice,
-      unrealisedPnl: position.unrealisedPnl,
-      takeProfit: position.takeProfit,
-      stopLoss: position.stopLoss,
-      leverage: position.leverage,
-      positionStatus: position.positionStatus,
-      updatedTime: position.updatedTime,
-    } : null,
-    currentOpenOrder: liveOrder ? {
-      orderId: liveOrder.orderId,
-      orderType: liveOrder.orderType,
-      side: liveOrder.side,
-      qty: liveOrder.qty,
-      price: liveOrder.price,
-      orderStatus: liveOrder.orderStatus,
-      createdTime: liveOrder.createdTime,
-    } : null,
-    notableEvents: [
-      'Signal received and parsed',
-      'Risk evaluation passed for entry execution',
-      'Demo market order submitted to Bybit',
-    ],
+    sourceDbPath: resolvedDbPath,
+  };
+
+  const currentPosition = position ? {
+    symbol: position.symbol,
+    side: position.side,
+    size: position.size,
+    avgPrice: position.avgPrice,
+    markPrice: position.markPrice,
+    unrealisedPnl: position.unrealisedPnl,
+    takeProfit: position.takeProfit,
+    stopLoss: position.stopLoss,
+    leverage: position.leverage,
+    positionStatus: position.positionStatus,
+    updatedTime: position.updatedTime,
+  } : null;
+
+  const currentOpenOrder = liveOrder ? {
+    orderId: liveOrder.orderId,
+    orderType: liveOrder.orderType,
+    side: liveOrder.side,
+    qty: liveOrder.qty,
+    price: liveOrder.price,
+    orderStatus: liveOrder.orderStatus,
+    createdTime: liveOrder.createdTime,
+  } : null;
+
+  const recentActivity = {
+    orderAttemptCount: attempts.length,
+    recentOrderAttemptCount: recentAttempts.length,
+    recentSignals,
+    distinctRecentSignals,
+    recentSignalFlipCount: recentSignalFlips,
+    latestTenAttemptWindow: recentAttempts.map(item => ({
+      createdAt: item.created_at,
+      signal: item.signal,
+      side: item.side,
+      status: item.status,
+      qty: item.qty,
+    })),
+  };
+
+  const notableEvents = [
+    'Signal received and parsed',
+    'Risk evaluation passed for entry execution',
+    latest.status === 'submitted'
+      ? 'Demo market order submitted to Bybit'
+      : `Latest order attempt status was ${latest.status}`,
+    recentSignalFlips > 0
+      ? `Recent signal direction changed ${recentSignalFlips} times in the last ${recentAttempts.length} attempts`
+      : `Recent signal direction stayed consistent across the last ${recentAttempts.length} attempts`,
+  ];
+
+  const jsonSummary = {
+    summaryVersion: '1.1.0',
+    generatedAt: new Date().toISOString(),
+    trade,
+    recentActivity,
+    currentPosition,
+    currentOpenOrder,
+    latestOrderResponse,
+    notableEvents,
   };
 
   const textSummary = [
-    `Trade summary for ${jsonSummary.botId} / ${jsonSummary.symbol}`,
-    `Signal: ${jsonSummary.signal}`,
-    `Side: ${jsonSummary.side}`,
-    `Order status: ${jsonSummary.orderStatus}`,
-    `Qty: ${jsonSummary.orderQty}`,
-    `Notional USD: ${jsonSummary.notionalUsd}`,
-    `Created: ${jsonSummary.createdAt}`,
-    jsonSummary.currentPosition
-      ? `Current position: side=${jsonSummary.currentPosition.side || 'flat'}, size=${jsonSummary.currentPosition.size}, avgPrice=${jsonSummary.currentPosition.avgPrice || 'n/a'}, markPrice=${jsonSummary.currentPosition.markPrice || 'n/a'}, unrealisedPnl=${jsonSummary.currentPosition.unrealisedPnl || 'n/a'}`
-      : 'Current position: unavailable',
-    jsonSummary.currentOpenOrder
-      ? `Open order: ${jsonSummary.currentOpenOrder.orderId} status=${jsonSummary.currentOpenOrder.orderStatus}`
-      : 'Open order: none',
+    `Trade summary for ${trade.botId} / ${trade.symbol}`,
+    `Signal: ${trade.signal}`,
+    `Side: ${trade.side}`,
+    `Order status: ${trade.orderStatus}`,
+    `Order type: ${trade.orderType}`,
+    `Qty: ${trade.orderQty}`,
+    `Notional USD: ${trade.notionalUsd}`,
+    `Created: ${trade.createdAt}`,
+    `Generated: ${jsonSummary.generatedAt}`,
+    `Source DB: ${trade.sourceDbPath}`,
+    `Recent attempts: ${recentActivity.recentOrderAttemptCount} shown / ${recentActivity.orderAttemptCount} total`,
+    `Distinct recent signals: ${recentActivity.distinctRecentSignals.join(', ')}`,
+    `Recent signal flips: ${recentActivity.recentSignalFlipCount}`,
+    formatPositionSummary(currentPosition),
+    formatOpenOrderSummary(currentOpenOrder),
     'Notable events:',
-    ...jsonSummary.notableEvents.map(x => `- ${x}`),
+    ...notableEvents.map(x => `- ${x}`),
   ].join('\n');
 
   return { jsonSummary, textSummary };
