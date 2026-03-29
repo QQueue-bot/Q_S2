@@ -1,5 +1,6 @@
 const path = require('path');
 const { loadAndValidateSettings } = require('../config/validateSettings');
+const { resolveBotContext } = require('../config/resolveBotContext');
 const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite');
 
 function isEntrySignal(signal) {
@@ -19,7 +20,8 @@ function hasActivePlaceholderValues(settings) {
 }
 
 function createRiskEngine(options = {}) {
-  const settingsPath = options.settingsPath || path.join(__dirname, '..', '..', 'config', 'settings.json');
+  const botContext = options.botContext || resolveBotContext('Bot1');
+  const settingsPath = options.settingsPath || botContext.settingsPath || path.join(__dirname, '..', '..', 'config', 'settings.json');
   const { settings, validation } = loadAndValidateSettings(settingsPath);
   const dbPath = path.resolve(path.dirname(settingsPath), '..', settings.storage.databasePath.replace(/^\.\//, ''));
   const db = createDatabase(dbPath);
@@ -34,8 +36,12 @@ function createRiskEngine(options = {}) {
       reasons.push('Configured symbol is not in allowedSymbols');
     }
 
-    if (!['Bot1'].includes(parsedSignal.botId)) {
+    if (!botContext.allowedBots.includes(parsedSignal.botId)) {
       reasons.push(`Bot is not allowed: ${parsedSignal.botId}`);
+    }
+
+    if (parsedSignal.botId !== botContext.botId) {
+      reasons.push(`Resolved bot context mismatch: expected ${botContext.botId}, got ${parsedSignal.botId}`);
     }
 
     if (settings.positionSizing.accountPercent > settings.riskControls.maxAccountPercent) {

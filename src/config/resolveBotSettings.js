@@ -25,6 +25,7 @@ function resolveBotSettings(botId, options = {}) {
   const validated = loadAndValidateSettings(settingsPath);
   return {
     bot,
+    symbol: bot.symbol,
     settingsPath,
     settings: validated.settings,
     validation: validated.validation,

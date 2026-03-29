@@ -4,6 +4,7 @@ const path = require('path');
 const dotenv = require('dotenv');
 const axios = require('axios');
 const { loadAndValidateSettings } = require('../config/validateSettings');
+const { resolveBotContext } = require('../config/resolveBotContext');
 const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite');
 
 const BYBIT_DEMO_BASE_URL = 'https://api-demo.bybit.com';
@@ -373,10 +374,11 @@ async function executePaperTrade(parsedSignal, options = {}) {
     throw new Error('Missing BYBIT_TESTNET_API_KEY or BYBIT_TESTNET_API_SECRET in project .env');
   }
 
+  const botContext = options.botContext || resolveBotContext(parsedSignal.botId);
   const { settings } = loadAndValidateSettings(settingsPath);
   const { dbPath, persistence } = resolvePersistence(options, settingsPath, settings);
 
-  const symbol = settings.trading.defaultSymbol;
+  const symbol = botContext.symbol;
   const side = sideFromSignal(parsedSignal.signal);
   const credentials = { apiKey, apiSecret };
   const livePosition = await getLivePosition(symbol, credentials);
@@ -520,7 +522,8 @@ async function executePaperTrade(parsedSignal, options = {}) {
 }
 
 async function manageBreakEven(options = {}) {
-  const settingsPath = options.settingsPath || path.join(__dirname, '..', '..', 'config', 'settings.json');
+  const botContext = options.botContext || resolveBotContext(options.botId || 'Bot1');
+  const settingsPath = options.settingsPath || botContext.settingsPath || path.join(__dirname, '..', '..', 'config', 'settings.json');
   const envPath = options.envPath || path.join(__dirname, '..', '..', '.env');
   loadProjectEnv(envPath);
 
@@ -532,7 +535,7 @@ async function manageBreakEven(options = {}) {
 
   const { settings } = loadAndValidateSettings(settingsPath);
   const { dbPath, persistence } = resolvePersistence(options, settingsPath, settings);
-  const symbol = settings.trading.defaultSymbol;
+  const symbol = botContext.symbol;
   const credentials = { apiKey, apiSecret };
   const livePosition = options.livePositionOverride || await getLivePosition(symbol, credentials);
   if (!livePosition) {
@@ -547,7 +550,7 @@ async function manageBreakEven(options = {}) {
   if (decision.type === 'arm_break_even') {
     persistence.recordBreakEvenEvent({
       created_at: new Date().toISOString(),
-      bot_id: 'Bot1',
+      bot_id: botContext.botId,
       symbol,
       event_type: 'armed',
       trigger_percent: Number(decision.triggerPercent),
@@ -561,7 +564,7 @@ async function manageBreakEven(options = {}) {
 
   const closeResult = await executeCloseOrder({
     symbol,
-    botId: 'Bot1',
+    botId: botContext.botId,
     livePosition,
     closePercent: 100,
     exitReason: 'break_even',
@@ -571,7 +574,7 @@ async function manageBreakEven(options = {}) {
   });
   persistence.recordBreakEvenEvent({
     created_at: new Date().toISOString(),
-    bot_id: 'Bot1',
+    bot_id: botContext.botId,
     symbol,
     event_type: 'closed_at_break_even',
     trigger_percent: Number(decision.triggerPercent),
@@ -591,7 +594,8 @@ async function manageBreakEven(options = {}) {
 }
 
 async function manageTpSl(options = {}) {
-  const settingsPath = options.settingsPath || path.join(__dirname, '..', '..', 'config', 'settings.json');
+  const botContext = options.botContext || resolveBotContext(options.botId || 'Bot1');
+  const settingsPath = options.settingsPath || botContext.settingsPath || path.join(__dirname, '..', '..', 'config', 'settings.json');
   const envPath = options.envPath || path.join(__dirname, '..', '..', '.env');
   loadProjectEnv(envPath);
 
@@ -603,7 +607,7 @@ async function manageTpSl(options = {}) {
 
   const { settings } = loadAndValidateSettings(settingsPath);
   const { dbPath, persistence } = resolvePersistence(options, settingsPath, settings);
-  const symbol = settings.trading.defaultSymbol;
+  const symbol = botContext.symbol;
   const credentials = { apiKey, apiSecret };
   const livePosition = options.livePositionOverride || await getLivePosition(symbol, credentials);
   if (!livePosition) {
@@ -617,7 +621,7 @@ async function manageTpSl(options = {}) {
 
   const closeResult = await executeCloseOrder({
     symbol,
-    botId: 'Bot1',
+    botId: botContext.botId,
     livePosition,
     closePercent: decision.closePercent,
     exitReason: decision.type,

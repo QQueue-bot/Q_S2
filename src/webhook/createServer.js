@@ -3,6 +3,7 @@ const { URL } = require('url');
 const path = require('path');
 const { parseSignalString } = require('../signals/parseSignal');
 const { loadAndValidateSettings } = require('../config/validateSettings');
+const { resolveBotContext } = require('../config/resolveBotContext');
 const { createRiskEngine } = require('../risk/evaluateSignal');
 const { executePaperTrade } = require('../execution/bybitExecution');
 
@@ -59,11 +60,12 @@ function createWebhookServer(options = {}) {
 
       try {
         const { settings, validation } = loadAndValidateSettings(settingsPath);
-        const allowedBots = ['Bot1'];
-        const parsedSignal = parseSignalString(signalInput, { allowedBots });
-        logger.info('Webhook parsed signal', { parsedSignal });
+        const bootContext = resolveBotContext('Bot1');
+        const parsedSignal = parseSignalString(signalInput, { allowedBots: bootContext.allowedBots });
+        const botContext = resolveBotContext(parsedSignal.botId);
+        logger.info('Webhook parsed signal', { parsedSignal, botContext: { botId: botContext.botId, symbol: botContext.symbol, settingsPath: botContext.settingsPath } });
 
-        const riskEngine = createRiskEngine({ settingsPath });
+        const riskEngine = createRiskEngine({ settingsPath: botContext.settingsPath, botContext });
         const risk = riskEngine.evaluate(parsedSignal);
         logger.info('Risk evaluation result', { risk });
 
@@ -71,7 +73,8 @@ function createWebhookServer(options = {}) {
           setImmediate(async () => {
             try {
               const execution = await executePaperTrade(parsedSignal, {
-                settingsPath,
+                settingsPath: botContext.settingsPath,
+                botContext,
                 envPath: '/home/ubuntu/.openclaw/workspace/.env',
               });
               logger.info('Execution result', { execution });
