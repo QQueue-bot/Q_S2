@@ -3,6 +3,7 @@ const Database = require('better-sqlite3');
 const dotenv = require('dotenv');
 const axios = require('axios');
 const crypto = require('crypto');
+const { generateTradeSummary } = require('../reporting/tradeSummary');
 
 const BYBIT_BASE_URL = process.env.BYBIT_BASE_URL || 'https://api-demo.bybit.com';
 dotenv.config({ path: '/home/ubuntu/.openclaw/workspace/.env' });
@@ -160,6 +161,41 @@ function loadExecutionTimeline(dbPath) {
   }
 }
 
+async function loadLatestTradeSummary(runtime) {
+  try {
+    return await generateTradeSummary({
+      settingsPath: runtime.settingsPath || '/tmp/qs2_review/config/settings.json',
+      envPath: '/home/ubuntu/.openclaw/workspace/.env',
+      dbPath: runtime.dbPath || '/tmp/qs2_review/data/s2.sqlite',
+    });
+  } catch (error) {
+    return {
+      error: error.message,
+      jsonSummary: null,
+      textSummary: null,
+    };
+  }
+}
+
+function renderTradeSummaryPanel(summaryState) {
+  if (!summaryState || summaryState.error) {
+    return `<p>Unable to load latest trade summary: ${(summaryState && summaryState.error) || 'unknown error'}</p>`;
+  }
+
+  const { jsonSummary, textSummary } = summaryState;
+  return `
+    <div class="signal-item">
+      <div><strong>Generated:</strong> <code>${jsonSummary.generatedAt}</code></div>
+      <div><strong>Source DB:</strong> <code>${jsonSummary.trade.sourceDbPath}</code></div>
+      <div style="margin-top:8px; white-space:pre-wrap;">${textSummary}</div>
+    </div>
+    <details class="json-block">
+      <summary>Raw JSON</summary>
+      <pre>${JSON.stringify(jsonSummary, null, 2)}</pre>
+    </details>
+  `;
+}
+
 function renderExecutionTimeline(events = []) {
   if (!events.length) {
     return '<p>No execution events found yet.</p>';
@@ -220,7 +256,7 @@ function renderPositionPanel(positionState = {}) {
   return `${positionHtml}<div style="height:12px"></div>${ordersHtml}`;
 }
 
-function renderDashboardHtml({ title = 'S2 Dashboard', runtime = {}, signals = [], positionState = {}, executionEvents = [] } = {}) {
+function renderDashboardHtml({ title = 'S2 Dashboard', runtime = {}, signals = [], positionState = {}, executionEvents = [], latestSummary = null } = {}) {
   const sections = [
     {
       id: 'signals',
@@ -240,7 +276,7 @@ function renderDashboardHtml({ title = 'S2 Dashboard', runtime = {}, signals = [
     {
       id: 'summary',
       title: 'Trade Summary',
-      body: 'Placeholder for Sprint B5 trade summary view.',
+      body: renderTradeSummaryPanel(latestSummary),
     },
     {
       id: 'health',
@@ -325,6 +361,23 @@ function renderDashboardHtml({ title = 'S2 Dashboard', runtime = {}, signals = [
     .status-neutral {
       color: #cbd5e1;
     }
+    .json-block {
+      margin-top: 12px;
+    }
+    .json-block summary {
+      cursor: pointer;
+      color: #93c5fd;
+      margin-bottom: 8px;
+    }
+    .json-block pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #0f172a;
+      border: 1px solid #1f2937;
+      border-radius: 10px;
+      padding: 12px;
+      overflow-x: auto;
+    }
     h1, h2, p { margin: 0; }
     h1 { font-size: 28px; }
     h2 { font-size: 16px; margin-bottom: 10px; }
@@ -376,8 +429,12 @@ function createDashboardServer(options = {}) {
     const signals = loadRecentSignals(signalDbPath);
     const executionEvents = loadExecutionTimeline(signalDbPath);
     const positionState = await loadCurrentPositionAndOrders('BTCUSDT');
+    const latestSummary = await loadLatestTradeSummary({
+      dbPath: signalDbPath,
+      settingsPath: runtime.settingsPath || '/tmp/qs2_review/config/settings.json',
+    });
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(renderDashboardHtml({ title, runtime, signals, positionState, executionEvents }));
+    res.end(renderDashboardHtml({ title, runtime, signals, positionState, executionEvents, latestSummary }));
   });
 
   return {
