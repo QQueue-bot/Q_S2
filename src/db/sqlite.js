@@ -50,6 +50,20 @@ function initSchema(db) {
       last_price REAL NOT NULL,
       source TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS order_attempts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL,
+      signal TEXT NOT NULL,
+      bot_id TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      side TEXT NOT NULL,
+      order_type TEXT NOT NULL,
+      qty TEXT NOT NULL,
+      notional_usd REAL NOT NULL,
+      status TEXT NOT NULL,
+      response_json TEXT
+    );
   `);
 }
 
@@ -95,6 +109,14 @@ function buildPersistence(db) {
     )
   `);
 
+  const insertOrderAttempt = db.prepare(`
+    INSERT INTO order_attempts (
+      created_at, signal, bot_id, symbol, side, order_type, qty, notional_usd, status, response_json
+    ) VALUES (
+      @created_at, @signal, @bot_id, @symbol, @side, @order_type, @qty, @notional_usd, @status, @response_json
+    )
+  `);
+
   return {
     recordWebhookEvent(event) {
       return insertWebhookEvent.run(event);
@@ -114,6 +136,9 @@ function buildPersistence(db) {
     recordPriceTick(tick) {
       return insertPriceTick.run(tick);
     },
+    recordOrderAttempt(attempt) {
+      return insertOrderAttempt.run(attempt);
+    },
     getWebhookEvents() {
       return db.prepare('SELECT * FROM raw_webhook_events ORDER BY id ASC').all();
     },
@@ -125,6 +150,9 @@ function buildPersistence(db) {
     },
     getPriceTicks() {
       return db.prepare('SELECT * FROM price_ticks ORDER BY id ASC').all();
+    },
+    getOrderAttempts() {
+      return db.prepare('SELECT * FROM order_attempts ORDER BY id ASC').all();
     },
   };
 }

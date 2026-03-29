@@ -8,10 +8,13 @@
     "test:signal": "node scripts/test-parse-signal.js",
     "run:webhook": "node scripts/run-webhook.js",
     "test:persistence": "node scripts/test-persistence.js",
-    "test:price": "node scripts/test-price-monitor.js"
+    "test:price": "node scripts/test-price-monitor.js",
+    "test:execution": "node scripts/test-execution.js"
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "dotenv": "^16.4.5",
+    "axios": "^1.8.4"
   }
 }
