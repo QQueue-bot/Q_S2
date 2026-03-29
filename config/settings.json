@@ -38,42 +38,42 @@
     "levels": [
       {
         "index": 1,
-        "triggerPercent": 0.0,
-        "closePercent": 0.0,
+        "triggerPercent": 0.4,
+        "closePercent": 50.0,
         "enabled": true
       },
       {
         "index": 2,
-        "triggerPercent": 0.0,
-        "closePercent": 0.0,
+        "triggerPercent": 0.8,
+        "closePercent": 50.0,
         "enabled": true
       },
       {
         "index": 3,
         "triggerPercent": 0.0,
         "closePercent": 0.0,
-        "enabled": true
+        "enabled": false
       },
       {
         "index": 4,
         "triggerPercent": 0.0,
         "closePercent": 0.0,
-        "enabled": true
+        "enabled": false
       },
       {
         "index": 5,
         "triggerPercent": 0.0,
         "closePercent": 0.0,
-        "enabled": true
+        "enabled": false
       },
       {
         "index": 6,
         "triggerPercent": 0.0,
         "closePercent": 0.0,
-        "enabled": true
+        "enabled": false
       }
     ],
-    "notes": "Trigger percentages are measured from entry price. Close percentages can differ per TP level. All zero values are placeholders only."
+    "notes": "Demo-validation profile: TP1 at 0.4% and TP2 at 0.8% to sit outside short-term BTC noise while keeping outcomes observable in test runs."
   },
   "stopLoss": {
     "enabled": true,
@@ -82,8 +82,8 @@
   },
   "breakEven": {
     "enabled": true,
-    "triggerPercent": 0.0,
-    "notes": "When reached, stop loss may be moved to entry/break-even. Zero is a placeholder only."
+    "triggerPercent": 0.3,
+    "notes": "Demo-validation profile: break-even arms only after a 0.3% favorable move so it confirms momentum before protecting the position."
   },
   "dca": {
     "enabled": false,
