@@ -9,7 +9,84 @@
         "apiKeyEnv": "S2_BOT1_API_KEY",
         "apiSecretEnv": "S2_BOT1_API_SECRET"
       },
-      "notes": "Initial concrete registry entry for Milestone C with env-backed credential references"
+      "notes": "Primary verified live-routed bot for Milestone C"
+    },
+    {
+      "botId": "Bot2",
+      "enabled": false,
+      "symbol": "BTCUSDT",
+      "settingsRef": "./settings.json",
+      "credentialRef": {
+        "apiKeyEnv": "S2_BOT2_API_KEY",
+        "apiSecretEnv": "S2_BOT2_API_SECRET"
+      },
+      "notes": "Prepared for later activation; disabled by default"
+    },
+    {
+      "botId": "Bot3",
+      "enabled": false,
+      "symbol": "BTCUSDT",
+      "settingsRef": "./settings.json",
+      "credentialRef": {
+        "apiKeyEnv": "S2_BOT3_API_KEY",
+        "apiSecretEnv": "S2_BOT3_API_SECRET"
+      },
+      "notes": "Prepared for later activation; disabled by default"
+    },
+    {
+      "botId": "Bot4",
+      "enabled": false,
+      "symbol": "BTCUSDT",
+      "settingsRef": "./settings.json",
+      "credentialRef": {
+        "apiKeyEnv": "S2_BOT4_API_KEY",
+        "apiSecretEnv": "S2_BOT4_API_SECRET"
+      },
+      "notes": "Prepared for later activation; disabled by default"
+    },
+    {
+      "botId": "Bot5",
+      "enabled": false,
+      "symbol": "BTCUSDT",
+      "settingsRef": "./settings.json",
+      "credentialRef": {
+        "apiKeyEnv": "S2_BOT5_API_KEY",
+        "apiSecretEnv": "S2_BOT5_API_SECRET"
+      },
+      "notes": "Prepared for later activation; disabled by default"
+    },
+    {
+      "botId": "Bot6",
+      "enabled": false,
+      "symbol": "BTCUSDT",
+      "settingsRef": "./settings.json",
+      "credentialRef": {
+        "apiKeyEnv": "S2_BOT6_API_KEY",
+        "apiSecretEnv": "S2_BOT6_API_SECRET"
+      },
+      "notes": "Prepared for later activation; disabled by default"
+    },
+    {
+      "botId": "Bot7",
+      "enabled": false,
+      "symbol": "BTCUSDT",
+      "settingsRef": "./settings.json",
+      "credentialRef": {
+        "apiKeyEnv": "S2_BOT7_API_KEY",
+        "apiSecretEnv": "S2_BOT7_API_SECRET"
+      },
+      "notes": "Prepared for later activation; disabled by default"
+    },
+    {
+      "botId": "Bot8",
+      "enabled": false,
+      "symbol": "BTCUSDT",
+      "settingsRef": "./settings.json",
+      "credentialRef": {
+        "apiKeyEnv": "S2_BOT8_API_KEY",
+        "apiSecretEnv": "S2_BOT8_API_SECRET"
+      },
+      "notes": "Prepared for later activation; disabled by default"
     }
   ]
 }
