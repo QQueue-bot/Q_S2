@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const dotenv = require('dotenv');
+const axios = require('axios');
 const { loadAndValidateSettings } = require('../config/validateSettings');
 const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite');
 
@@ -17,15 +18,47 @@ function sideFromSignal(signal) {
   throw new Error(`Unsupported execution signal: ${signal}`);
 }
 
-function computeOrderSizing({ maxMarginUsd, accountPercent, leverage, referencePrice }) {
+function decimalPlaces(value) {
+  const text = String(value);
+  if (!text.includes('.')) return 0;
+  return text.split('.')[1].length;
+}
+
+function floorToStep(value, step) {
+  const precision = decimalPlaces(step);
+  const floored = Math.floor(value / step) * step;
+  return Number(floored.toFixed(precision));
+}
+
+function computeOrderSizing({ maxMarginUsd, accountPercent, leverage, referencePrice, qtyStep, minOrderQty, maxMktOrderQty, minNotionalValue }) {
   const marginUsd = maxMarginUsd * (accountPercent / 100);
   const notionalUsd = marginUsd * leverage;
-  const qty = notionalUsd / referencePrice;
+  let qty = notionalUsd / referencePrice;
+  qty = floorToStep(qty, qtyStep);
+  if (qty < minOrderQty) {
+    throw new Error(`Computed qty ${qty} is below minOrderQty ${minOrderQty}`);
+  }
+  if (qty > maxMktOrderQty) {
+    qty = floorToStep(maxMktOrderQty, qtyStep);
+  }
+  const finalNotional = qty * referencePrice;
+  if (finalNotional < minNotionalValue) {
+    throw new Error(`Computed notional ${finalNotional} is below minNotionalValue ${minNotionalValue}`);
+  }
   return {
     marginUsd,
-    notionalUsd,
-    qty: qty.toFixed(6),
+    notionalUsd: finalNotional,
+    qty: qty.toFixed(decimalPlaces(qtyStep)),
   };
+}
+
+async function getInstrumentInfo(symbol) {
+  const response = await axios.get(`https://api-demo.bybit.com/v5/market/instruments-info?category=linear&symbol=${symbol}`);
+  const instrument = response.data?.result?.list?.[0];
+  if (!instrument) {
+    throw new Error(`Instrument info not found for ${symbol}`);
+  }
+  return instrument;
 }
 
 async function executePaperTrade(parsedSignal, options = {}) {
@@ -52,11 +85,17 @@ async function executePaperTrade(parsedSignal, options = {}) {
     throw new Error('No stored price tick available for sizing');
   }
 
+  const instrument = await getInstrumentInfo(symbol);
+  const lot = instrument.lotSizeFilter;
   const sizing = computeOrderSizing({
     maxMarginUsd: 5000,
     accountPercent: settings.positionSizing.accountPercent,
     leverage: settings.positionSizing.leverage,
     referencePrice: latestTick.last_price,
+    qtyStep: Number(lot.qtyStep),
+    minOrderQty: Number(lot.minOrderQty),
+    maxMktOrderQty: Number(lot.maxMktOrderQty),
+    minNotionalValue: Number(lot.minNotionalValue),
   });
 
   const timestamp = Date.now().toString();
@@ -67,8 +106,6 @@ async function executePaperTrade(parsedSignal, options = {}) {
     side,
     orderType: 'Market',
     qty: sizing.qty,
-    marketUnit: 'baseCoin',
-    isLeverage: 1,
     positionIdx: 0,
   });
 
@@ -106,6 +143,7 @@ async function executePaperTrade(parsedSignal, options = {}) {
     symbol,
     side,
     sizing,
+    instrumentLotSize: lot,
     response: responseJson,
   };
 }
