@@ -89,6 +89,18 @@ function initSchema(db) {
       mark_price REAL NOT NULL,
       response_json TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS staged_entry_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      bot_id TEXT NOT NULL,
+      stage_name TEXT NOT NULL,
+      delay_seconds INTEGER NOT NULL,
+      qty TEXT NOT NULL,
+      status TEXT NOT NULL,
+      response_json TEXT
+    );
   `);
 }
 
@@ -158,6 +170,14 @@ function buildPersistence(db) {
     )
   `);
 
+  const insertStagedEntryEvent = db.prepare(`
+    INSERT INTO staged_entry_events (
+      created_at, symbol, bot_id, stage_name, delay_seconds, qty, status, response_json
+    ) VALUES (
+      @created_at, @symbol, @bot_id, @stage_name, @delay_seconds, @qty, @status, @response_json
+    )
+  `);
+
   return {
     recordWebhookEvent(event) {
       return insertWebhookEvent.run(event);
@@ -186,6 +206,9 @@ function buildPersistence(db) {
     recordBreakEvenEvent(event) {
       return insertBreakEvenEvent.run(event);
     },
+    recordStagedEntryEvent(event) {
+      return insertStagedEntryEvent.run(event);
+    },
     getWebhookEvents() {
       return db.prepare('SELECT * FROM raw_webhook_events ORDER BY id ASC').all();
     },
@@ -206,6 +229,9 @@ function buildPersistence(db) {
     },
     getBreakEvenEvents() {
       return db.prepare('SELECT * FROM break_even_events ORDER BY id ASC').all();
+    },
+    getStagedEntryEvents() {
+      return db.prepare('SELECT * FROM staged_entry_events ORDER BY id ASC').all();
     },
   };
 }

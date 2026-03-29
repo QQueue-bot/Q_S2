@@ -330,6 +330,37 @@ async function executeCloseOrder({ symbol, livePosition, closePercent, exitReaso
   };
 }
 
+async function submitEntryOrder({ symbol, side, qty, botId, signal, notionalUsd, credentials, persistence, stageName = 'initial_entry' }) {
+  const entryPayload = {
+    category: 'linear',
+    symbol,
+    side,
+    orderType: 'Market',
+    qty,
+    positionIdx: 0,
+  };
+
+  const entryResult = await bybitPrivatePost('/v5/order/create', entryPayload, credentials);
+  const responseJson = entryResult.json;
+  persistence.recordOrderAttempt({
+    created_at: new Date().toISOString(),
+    signal,
+    bot_id: botId,
+    symbol,
+    side,
+    order_type: 'Market',
+    qty,
+    notional_usd: notionalUsd,
+    status: entryResult.ok && responseJson.retCode === 0 ? 'submitted' : 'failed',
+    response_json: JSON.stringify({ ...responseJson, stageName }),
+  });
+
+  return {
+    ok: entryResult.ok && responseJson.retCode === 0,
+    response: responseJson,
+  };
+}
+
 async function executePaperTrade(parsedSignal, options = {}) {
   const settingsPath = options.settingsPath || path.join(__dirname, '..', '..', 'config', 'settings.json');
   const envPath = options.envPath || path.join(__dirname, '..', '..', '.env');
@@ -394,39 +425,96 @@ async function executePaperTrade(parsedSignal, options = {}) {
     minNotionalValue: Number(lot.minNotionalValue),
   });
 
-  const entryPayload = {
-    category: 'linear',
-    symbol,
-    side,
-    orderType: 'Market',
-    qty: sizing.qty,
-    positionIdx: 0,
-  };
+  const stageDelaySeconds = options.stageDelaySeconds ?? 60;
+  const stageOneQty = computeCloseQty(sizing.qty, 50, Number(lot.qtyStep));
+  const stageTwoQtyRaw = Number(sizing.qty) - Number(stageOneQty);
+  const stageTwoQty = stageTwoQtyRaw.toFixed(decimalPlaces(Number(lot.qtyStep)));
 
-  const entryResult = await bybitPrivatePost('/v5/order/create', entryPayload, credentials);
-  const responseJson = entryResult.json;
-  persistence.recordOrderAttempt({
-    created_at: new Date().toISOString(),
-    signal: parsedSignal.signal,
-    bot_id: parsedSignal.botId,
+  const firstEntry = await submitEntryOrder({
     symbol,
     side,
-    order_type: 'Market',
-    qty: sizing.qty,
-    notional_usd: sizing.notionalUsd,
-    status: entryResult.ok && responseJson.retCode === 0 ? 'submitted' : 'failed',
-    response_json: JSON.stringify(responseJson),
+    qty: stageOneQty,
+    botId: parsedSignal.botId,
+    signal: parsedSignal.signal,
+    notionalUsd: Number(stageOneQty) * Number(latestTick.last_price),
+    credentials,
+    persistence,
+    stageName: 'initial_entry_50',
+  });
+  persistence.recordStagedEntryEvent({
+    created_at: new Date().toISOString(),
+    symbol,
+    bot_id: parsedSignal.botId,
+    stage_name: 'initial_entry_50',
+    delay_seconds: 0,
+    qty: stageOneQty,
+    status: firstEntry.ok ? 'submitted' : 'failed',
+    response_json: JSON.stringify(firstEntry.response),
   });
 
+  let delayedEntry = null;
+  if (firstEntry.ok) {
+    await new Promise(resolve => setTimeout(resolve, stageDelaySeconds * 1000));
+    const beArmed = hasBreakEvenArmed(persistence, symbol);
+    if (beArmed) {
+      persistence.recordStagedEntryEvent({
+        created_at: new Date().toISOString(),
+        symbol,
+        bot_id: parsedSignal.botId,
+        stage_name: 'delayed_entry_50',
+        delay_seconds: stageDelaySeconds,
+        qty: stageTwoQty,
+        status: 'skipped_break_even_armed',
+        response_json: JSON.stringify({ skipped: true, reason: 'break_even_armed' }),
+      });
+      delayedEntry = {
+        ok: false,
+        skipped: true,
+        reason: 'break_even_armed',
+        qty: stageTwoQty,
+      };
+    } else {
+      const secondEntry = await submitEntryOrder({
+        symbol,
+        side,
+        qty: stageTwoQty,
+        botId: parsedSignal.botId,
+        signal: `${parsedSignal.signal}_STAGE_2`,
+        notionalUsd: Number(stageTwoQty) * Number(latestTick.last_price),
+        credentials,
+        persistence,
+        stageName: 'delayed_entry_50',
+      });
+      persistence.recordStagedEntryEvent({
+        created_at: new Date().toISOString(),
+        symbol,
+        bot_id: parsedSignal.botId,
+        stage_name: 'delayed_entry_50',
+        delay_seconds: stageDelaySeconds,
+        qty: stageTwoQty,
+        status: secondEntry.ok ? 'submitted' : 'failed',
+        response_json: JSON.stringify(secondEntry.response),
+      });
+      delayedEntry = secondEntry;
+    }
+  }
+
   return {
-    ok: entryResult.ok && responseJson.retCode === 0,
+    ok: firstEntry.ok,
     symbol,
     side,
     sizing,
     instrumentLotSize: lot,
     reversal,
+    stagedEntry: {
+      enabled: true,
+      stageDelaySeconds,
+      firstEntryQty: stageOneQty,
+      delayedEntryQty: stageTwoQty,
+      delayedEntry,
+    },
     dbPath,
-    response: responseJson,
+    response: firstEntry.response,
   };
 }
 
@@ -548,6 +636,7 @@ module.exports = {
   manageBreakEven,
   computeOrderSizing,
   computePnlPercent,
+  computeCloseQty,
   evaluateTpSl,
   shouldTriggerBreakEven,
   getLivePosition,
