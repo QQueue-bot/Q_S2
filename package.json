@@ -7,6 +7,7 @@
     "validate:settings": "node scripts/validate-settings.js",
     "test:signal": "node scripts/test-parse-signal.js",
     "run:webhook": "node scripts/run-webhook.js",
+    "run:dashboard": "node scripts/run-dashboard.js",
     "test:persistence": "node scripts/test-persistence.js",
     "test:price": "node scripts/test-price-monitor.js",
     "test:execution": "node scripts/test-execution.js"
