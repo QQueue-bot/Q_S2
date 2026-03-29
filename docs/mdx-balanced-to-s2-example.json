@@ -1,0 +1,61 @@
+{
+  "sourceBot": {
+    "botName": "IP",
+    "asset": "IPUSDT",
+    "selectedProfile": "balanced"
+  },
+  "mappingClassification": {
+    "directRuntimeMappings": [
+      "tpNTargetPercent -> takeProfit.levels[N].triggerPercent",
+      "tpNAllocationPercent -> takeProfit.levels[N].closePercent",
+      "stopLossPercent -> stopLoss.triggerPercent",
+      "leverage -> positionSizing.leverage"
+    ],
+    "derivedRuntimeMappings": [
+      "slToBeTrigger=TP1 -> breakEven.triggerPercent = tp1TargetPercent",
+      "tp level enablement derived from target/allocation > 0"
+    ],
+    "metadataOnly": [
+      "optimizedPeriod",
+      "exchange",
+      "timeframe",
+      "signalSetting",
+      "baseline",
+      "baselineValue",
+      "slType",
+      "slValue",
+      "performance30d",
+      "performance90d",
+      "performance180d",
+      "performance360d",
+      "winrate",
+      "profitFactor",
+      "profile tradeCount/winrate/netProfit/maxDrawdown/avgTradeProfit"
+    ]
+  },
+  "mappedS2Settings": {
+    "positionSizing": {
+      "leverage": 4
+    },
+    "takeProfit": {
+      "enabled": true,
+      "levels": [
+        { "index": 1, "triggerPercent": 4.27, "closePercent": 8, "enabled": true },
+        { "index": 2, "triggerPercent": 6.98, "closePercent": 40, "enabled": true },
+        { "index": 3, "triggerPercent": 9.91, "closePercent": 12, "enabled": true },
+        { "index": 4, "triggerPercent": 15.03, "closePercent": 12, "enabled": true },
+        { "index": 5, "triggerPercent": 33.21, "closePercent": 14, "enabled": true },
+        { "index": 6, "triggerPercent": 53.87, "closePercent": 14, "enabled": true }
+      ]
+    },
+    "stopLoss": {
+      "enabled": true,
+      "triggerPercent": 6
+    },
+    "breakEven": {
+      "enabled": true,
+      "triggerPercent": 4.27,
+      "sourceRule": "SL to BE = TP1"
+    }
+  }
+}
