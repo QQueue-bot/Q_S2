@@ -31,8 +31,20 @@ All sprints must read from settings where applicable.
 - Each sprint must be **testable**
 - Each sprint must produce a **GitHub commit**
 - Each sprint must update **Kanban status**
+- Each sprint must include a short **closeout/documentation step** before it is considered complete
 - Do not combine multiple sprint objectives into one work block
 - Every sprint should state both its **deliverable** and its **validation method**
+- Every sprint should leave behind enough durable context that a future review can reconstruct what was built, what was tested, what is temporary, and what still remains
+
+### Standard Sprint Card / Closeout Format
+
+Each sprint card should include:
+- **Objective** — what this sprint is for
+- **Work** — what gets built or changed
+- **Output** — concrete artifact produced
+- **Validation** — how success is tested or proven
+- **Closeout / Documentation** — GitHub updated, Trello updated, key runtime/config decisions documented, temporary drift/hacks noted, memory/internal notes updated, next dependency or risk recorded
+- **Non-goals** — what the sprint is explicitly not trying to do
 
 ## 4. Safety & Architecture Requirements
 
