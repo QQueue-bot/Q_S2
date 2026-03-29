@@ -167,9 +167,9 @@ function validateSettingsObject(settings) {
   }
 
   const zeroPlaceholdersPresent = (
-    isPlainObject(tp) && Array.isArray(tp.levels) && tp.levels.some(level => level.triggerPercent === 0 || level.closePercent === 0)
-  ) || (isPlainObject(sl) && sl.triggerPercent === 0)
-    || (isPlainObject(be) && be.triggerPercent === 0);
+    isPlainObject(tp) && Array.isArray(tp.levels) && tp.levels.some(level => level.enabled && (level.triggerPercent === 0 || level.closePercent === 0))
+  ) || (isPlainObject(sl) && sl.enabled && sl.triggerPercent === 0)
+    || (isPlainObject(be) && be.enabled && be.triggerPercent === 0);
 
   if (isPlainObject(trading) && trading.enabled && zeroPlaceholdersPresent) {
     addIssue(issues, 'error', 'settings.trading.enabled', 'Trading cannot be enabled while TP/SL/BE placeholder zero values exist');
