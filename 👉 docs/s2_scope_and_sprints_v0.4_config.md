@@ -46,6 +46,19 @@ Each sprint card should include:
 - **Closeout / Documentation** — GitHub updated, Trello updated, key runtime/config decisions documented, temporary drift/hacks noted, memory/internal notes updated, next dependency or risk recorded
 - **Non-goals** — what the sprint is explicitly not trying to do
 
+### Sprint Execution / Bug Handling Rule
+
+- Every sprint remains timeboxed to **30–60 minutes**.
+- Before starting, confirm the inputs/context needed for the sprint are ready.
+- During execution, do not let open-ended debugging silently replace the sprint objective.
+- If a bug is clearly in-scope and likely solvable within the sprint timebox, fix it and continue.
+- If debugging consumes roughly **15 minutes** or **2 serious fix attempts** without clean resolution, explicitly classify the situation as one of:
+  - **within-sprint fix**
+  - **blocker requiring a specific missing input/decision**
+  - **separate bugfix/recap sprint**
+- If a bug becomes the main work, stop pretending the original sprint is still happening and create/use a dedicated bugfix or recap sprint instead.
+- Every sprint should still end with a closeout, even if the result is partial or blocked.
+
 ## 4. Safety & Architecture Requirements
 
 Before meaningful execution logic, the system should explicitly support:
