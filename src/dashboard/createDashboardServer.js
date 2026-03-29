@@ -1,5 +1,11 @@
 const http = require('http');
 const Database = require('better-sqlite3');
+const dotenv = require('dotenv');
+const axios = require('axios');
+const crypto = require('crypto');
+
+const BYBIT_BASE_URL = process.env.BYBIT_BASE_URL || 'https://api-demo.bybit.com';
+dotenv.config({ path: '/home/ubuntu/.openclaw/workspace/.env' });
 
 function loadRecentSignals(dbPath) {
   try {
@@ -34,6 +40,47 @@ function loadRecentSignals(dbPath) {
   }
 }
 
+function signBybitRequest(query = '', body = '') {
+  const apiKey = process.env.BYBIT_TESTNET_API_KEY;
+  const apiSecret = process.env.BYBIT_TESTNET_API_SECRET;
+  if (!apiKey || !apiSecret) {
+    return null;
+  }
+  const timestamp = Date.now().toString();
+  const recvWindow = '5000';
+  const payload = timestamp + apiKey + recvWindow + (query || body);
+  const signature = crypto.createHmac('sha256', apiSecret).update(payload).digest('hex');
+  return { apiKey, timestamp, recvWindow, signature };
+}
+
+async function loadCurrentPositionAndOrders(symbol = 'BTCUSDT') {
+  try {
+    const query = `category=linear&symbol=${symbol}`;
+    const signed = signBybitRequest(query, '');
+    if (!signed) {
+      return { position: null, orders: [], error: 'Missing Bybit credentials' };
+    }
+
+    const headers = {
+      'X-BAPI-API-KEY': signed.apiKey,
+      'X-BAPI-TIMESTAMP': signed.timestamp,
+      'X-BAPI-RECV-WINDOW': signed.recvWindow,
+      'X-BAPI-SIGN': signed.signature,
+    };
+
+    const [positionResponse, ordersResponse] = await Promise.all([
+      axios.get(`${BYBIT_BASE_URL}/v5/position/list?${query}`, { headers, validateStatus: () => true }),
+      axios.get(`${BYBIT_BASE_URL}/v5/order/realtime?${query}`, { headers, validateStatus: () => true }),
+    ]);
+
+    const position = (positionResponse.data?.result?.list || []).find(item => Number(item.size || 0) > 0) || null;
+    const orders = ordersResponse.data?.result?.list || [];
+    return { position, orders, error: null };
+  } catch (error) {
+    return { position: null, orders: [], error: error.message };
+  }
+}
+
 function renderSignalFeed(signals = []) {
   if (!signals.length) {
     return '<p>No recent signals found yet.</p>';
@@ -52,7 +99,41 @@ function renderSignalFeed(signals = []) {
   return `<div class="signal-list">${items}</div>`;
 }
 
-function renderDashboardHtml({ title = 'S2 Dashboard', runtime = {}, signals = [] } = {}) {
+function renderPositionPanel(positionState = {}) {
+  const { position, orders = [], error } = positionState;
+  if (error) {
+    return `<p>Unable to load live BTCUSDT state: ${error}</p>`;
+  }
+
+  const positionHtml = position ? `
+    <div class="signal-item">
+      <div><strong>Open BTCUSDT Position</strong></div>
+      <div><span class="label">Side:</span> <code>${position.side}</code></div>
+      <div><span class="label">Size:</span> <code>${position.size}</code></div>
+      <div><span class="label">Avg Price:</span> <code>${position.avgPrice || 'n/a'}</code></div>
+      <div><span class="label">Mark Price:</span> <code>${position.markPrice || 'n/a'}</code></div>
+      <div><span class="label">Unrealized PnL:</span> <code>${position.unrealisedPnl || 'n/a'}</code></div>
+    </div>
+  ` : '<p>No open BTCUSDT position.</p>';
+
+  const ordersHtml = orders.length ? `
+    <div class="signal-list">
+      ${orders.map(order => `
+        <div class="signal-item">
+          <div><strong>Open Order</strong></div>
+          <div><span class="label">Order ID:</span> <code>${order.orderId}</code></div>
+          <div><span class="label">Side:</span> <code>${order.side}</code></div>
+          <div><span class="label">Qty:</span> <code>${order.qty}</code></div>
+          <div><span class="label">Status:</span> <code>${order.orderStatus}</code></div>
+        </div>
+      `).join('')}
+    </div>
+  ` : '<p>No open BTCUSDT orders.</p>';
+
+  return `${positionHtml}<div style="height:12px"></div>${ordersHtml}`;
+}
+
+function renderDashboardHtml({ title = 'S2 Dashboard', runtime = {}, signals = [], positionState = {} } = {}) {
   const sections = [
     {
       id: 'signals',
@@ -62,7 +143,7 @@ function renderDashboardHtml({ title = 'S2 Dashboard', runtime = {}, signals = [
     {
       id: 'positions',
       title: 'Open Positions / Orders',
-      body: 'Placeholder for Sprint B3 open position and open order state panel.',
+      body: renderPositionPanel(positionState),
     },
     {
       id: 'events',
@@ -180,7 +261,7 @@ function createDashboardServer(options = {}) {
 
   const signalDbPath = runtime.dbPath || '/tmp/qs2_review/data/s2.sqlite';
 
-  const server = http.createServer((req, res) => {
+  const server = http.createServer(async (req, res) => {
     if (req.method !== 'GET') {
       res.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('Method not allowed');
@@ -194,8 +275,9 @@ function createDashboardServer(options = {}) {
     }
 
     const signals = loadRecentSignals(signalDbPath);
+    const positionState = await loadCurrentPositionAndOrders('BTCUSDT');
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(renderDashboardHtml({ title, runtime, signals }));
+    res.end(renderDashboardHtml({ title, runtime, signals, positionState }));
   });
 
   return {
