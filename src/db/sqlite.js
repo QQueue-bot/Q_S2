@@ -77,6 +77,18 @@ function initSchema(db) {
       mark_price REAL NOT NULL,
       response_json TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS break_even_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      trigger_percent REAL NOT NULL,
+      side TEXT NOT NULL,
+      entry_price REAL NOT NULL,
+      mark_price REAL NOT NULL,
+      response_json TEXT
+    );
   `);
 }
 
@@ -138,6 +150,14 @@ function buildPersistence(db) {
     )
   `);
 
+  const insertBreakEvenEvent = db.prepare(`
+    INSERT INTO break_even_events (
+      created_at, symbol, event_type, trigger_percent, side, entry_price, mark_price, response_json
+    ) VALUES (
+      @created_at, @symbol, @event_type, @trigger_percent, @side, @entry_price, @mark_price, @response_json
+    )
+  `);
+
   return {
     recordWebhookEvent(event) {
       return insertWebhookEvent.run(event);
@@ -163,6 +183,9 @@ function buildPersistence(db) {
     recordExitEvent(event) {
       return insertExitEvent.run(event);
     },
+    recordBreakEvenEvent(event) {
+      return insertBreakEvenEvent.run(event);
+    },
     getWebhookEvents() {
       return db.prepare('SELECT * FROM raw_webhook_events ORDER BY id ASC').all();
     },
@@ -180,6 +203,9 @@ function buildPersistence(db) {
     },
     getExitEvents() {
       return db.prepare('SELECT * FROM exit_events ORDER BY id ASC').all();
+    },
+    getBreakEvenEvents() {
+      return db.prepare('SELECT * FROM break_even_events ORDER BY id ASC').all();
     },
   };
 }

@@ -176,6 +176,58 @@ function computePnlPercent(positionSide, entryPrice, markPrice) {
   return null;
 }
 
+function hasBreakEvenArmed(persistence, symbol) {
+  const events = persistence.getBreakEvenEvents ? persistence.getBreakEvenEvents() : [];
+  return events.some(event => event.symbol === symbol && event.event_type === 'armed');
+}
+
+function shouldTriggerBreakEven(settings, livePosition, persistence) {
+  if (!livePosition || !settings.breakEven?.enabled || settings.breakEven.triggerPercent <= 0) {
+    return { type: 'none' };
+  }
+
+  const pnlPercent = computePnlPercent(livePosition.side, livePosition.avgPrice, livePosition.markPrice);
+  if (pnlPercent === null) {
+    return { type: 'none' };
+  }
+
+  const armed = hasBreakEvenArmed(persistence, livePosition.symbol);
+  const triggerPercent = Number(settings.breakEven.triggerPercent);
+  const entryPrice = Number(livePosition.avgPrice || 0);
+  const markPrice = Number(livePosition.markPrice || 0);
+
+  if (!armed && pnlPercent >= triggerPercent) {
+    return {
+      type: 'arm_break_even',
+      triggerPercent,
+      pnlPercent,
+      entryPrice,
+      markPrice,
+    };
+  }
+
+  const returnedToEntry = livePosition.side === 'Buy'
+    ? markPrice <= entryPrice
+    : markPrice >= entryPrice;
+
+  if (armed && returnedToEntry) {
+    return {
+      type: 'break_even_close',
+      triggerPercent,
+      pnlPercent,
+      entryPrice,
+      markPrice,
+      closePercent: 100,
+    };
+  }
+
+  return {
+    type: 'none',
+    armed,
+    pnlPercent,
+  };
+}
+
 function evaluateTpSl(settings, livePosition) {
   if (!livePosition) return null;
   const pnlPercent = computePnlPercent(livePosition.side, livePosition.avgPrice, livePosition.markPrice);
@@ -378,6 +430,74 @@ async function executePaperTrade(parsedSignal, options = {}) {
   };
 }
 
+async function manageBreakEven(options = {}) {
+  const settingsPath = options.settingsPath || path.join(__dirname, '..', '..', 'config', 'settings.json');
+  const envPath = options.envPath || path.join(__dirname, '..', '..', '.env');
+  loadProjectEnv(envPath);
+
+  const apiKey = process.env.BYBIT_TESTNET_API_KEY;
+  const apiSecret = process.env.BYBIT_TESTNET_API_SECRET;
+  if (!apiKey || !apiSecret) {
+    throw new Error('Missing BYBIT_TESTNET_API_KEY or BYBIT_TESTNET_API_SECRET in project .env');
+  }
+
+  const { settings } = loadAndValidateSettings(settingsPath);
+  const { dbPath, persistence } = resolvePersistence(options, settingsPath, settings);
+  const symbol = settings.trading.defaultSymbol;
+  const credentials = { apiKey, apiSecret };
+  const livePosition = options.livePositionOverride || await getLivePosition(symbol, credentials);
+  if (!livePosition) {
+    return { ok: true, action: 'no_position', dbPath };
+  }
+
+  const decision = shouldTriggerBreakEven(settings, livePosition, persistence);
+  if (!decision || decision.type === 'none') {
+    return { ok: true, action: 'hold', dbPath, decision };
+  }
+
+  if (decision.type === 'arm_break_even') {
+    persistence.recordBreakEvenEvent({
+      created_at: new Date().toISOString(),
+      symbol,
+      event_type: 'armed',
+      trigger_percent: Number(decision.triggerPercent),
+      side: livePosition.side,
+      entry_price: Number(livePosition.avgPrice || 0),
+      mark_price: Number(livePosition.markPrice || 0),
+      response_json: JSON.stringify({ action: 'armed' }),
+    });
+    return { ok: true, action: 'armed', dbPath, decision };
+  }
+
+  const closeResult = await executeCloseOrder({
+    symbol,
+    livePosition,
+    closePercent: 100,
+    exitReason: 'break_even',
+    triggerPercent: decision.triggerPercent,
+    credentials,
+    persistence,
+  });
+  persistence.recordBreakEvenEvent({
+    created_at: new Date().toISOString(),
+    symbol,
+    event_type: 'closed_at_break_even',
+    trigger_percent: Number(decision.triggerPercent),
+    side: livePosition.side,
+    entry_price: Number(livePosition.avgPrice || 0),
+    mark_price: Number(livePosition.markPrice || 0),
+    response_json: JSON.stringify(closeResult.response),
+  });
+
+  return {
+    ok: closeResult.ok,
+    action: 'break_even_close',
+    dbPath,
+    decision,
+    closeResult,
+  };
+}
+
 async function manageTpSl(options = {}) {
   const settingsPath = options.settingsPath || path.join(__dirname, '..', '..', 'config', 'settings.json');
   const envPath = options.envPath || path.join(__dirname, '..', '..', '.env');
@@ -425,9 +545,11 @@ async function manageTpSl(options = {}) {
 module.exports = {
   executePaperTrade,
   manageTpSl,
+  manageBreakEven,
   computeOrderSizing,
   computePnlPercent,
   evaluateTpSl,
+  shouldTriggerBreakEven,
   getLivePosition,
   isOppositePosition,
   closeOppositePosition,
