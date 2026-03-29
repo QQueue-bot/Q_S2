@@ -293,7 +293,7 @@ function resolvePersistence(options, settingsPath, settings) {
   return { dbPath: fallbackDbPath, db, persistence: buildPersistence(db) };
 }
 
-async function executeCloseOrder({ symbol, livePosition, closePercent, exitReason, triggerPercent, credentials, persistence }) {
+async function executeCloseOrder({ symbol, botId, livePosition, closePercent, exitReason, triggerPercent, credentials, persistence }) {
   const instrument = await getInstrumentInfo(symbol);
   const qtyStep = Number(instrument.lotSizeFilter.qtyStep);
   const requestedQty = closePercent >= 100 ? Number(livePosition.size).toFixed(decimalPlaces(qtyStep)) : computeCloseQty(livePosition.size, closePercent, qtyStep);
@@ -310,6 +310,7 @@ async function executeCloseOrder({ symbol, livePosition, closePercent, exitReaso
   const result = await bybitPrivatePost('/v5/order/create', payload, credentials);
   persistence.recordExitEvent({
     created_at: new Date().toISOString(),
+    bot_id: botId || 'Bot1',
     symbol,
     exit_reason: exitReason,
     trigger_percent: Number(triggerPercent),
@@ -546,6 +547,7 @@ async function manageBreakEven(options = {}) {
   if (decision.type === 'arm_break_even') {
     persistence.recordBreakEvenEvent({
       created_at: new Date().toISOString(),
+      bot_id: 'Bot1',
       symbol,
       event_type: 'armed',
       trigger_percent: Number(decision.triggerPercent),
@@ -559,6 +561,7 @@ async function manageBreakEven(options = {}) {
 
   const closeResult = await executeCloseOrder({
     symbol,
+    botId: 'Bot1',
     livePosition,
     closePercent: 100,
     exitReason: 'break_even',
@@ -568,6 +571,7 @@ async function manageBreakEven(options = {}) {
   });
   persistence.recordBreakEvenEvent({
     created_at: new Date().toISOString(),
+    bot_id: 'Bot1',
     symbol,
     event_type: 'closed_at_break_even',
     trigger_percent: Number(decision.triggerPercent),
@@ -613,6 +617,7 @@ async function manageTpSl(options = {}) {
 
   const closeResult = await executeCloseOrder({
     symbol,
+    botId: 'Bot1',
     livePosition,
     closePercent: decision.closePercent,
     exitReason: decision.type,

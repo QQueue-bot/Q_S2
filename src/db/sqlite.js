@@ -68,6 +68,7 @@ function initSchema(db) {
     CREATE TABLE IF NOT EXISTS exit_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       created_at TEXT NOT NULL,
+      bot_id TEXT NOT NULL DEFAULT 'Bot1',
       symbol TEXT NOT NULL,
       exit_reason TEXT NOT NULL,
       trigger_percent REAL NOT NULL,
@@ -81,6 +82,7 @@ function initSchema(db) {
     CREATE TABLE IF NOT EXISTS break_even_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       created_at TEXT NOT NULL,
+      bot_id TEXT NOT NULL DEFAULT 'Bot1',
       symbol TEXT NOT NULL,
       event_type TEXT NOT NULL,
       trigger_percent REAL NOT NULL,
@@ -102,6 +104,16 @@ function initSchema(db) {
       response_json TEXT
     );
   `);
+
+  const ensureColumn = (tableName, columnName, columnSql) => {
+    const columns = db.prepare(`PRAGMA table_info(${tableName})`).all();
+    if (!columns.some(column => column.name === columnName)) {
+      db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnSql}`);
+    }
+  };
+
+  ensureColumn('exit_events', 'bot_id', "TEXT NOT NULL DEFAULT 'Bot1'");
+  ensureColumn('break_even_events', 'bot_id', "TEXT NOT NULL DEFAULT 'Bot1'");
 }
 
 function buildPersistence(db) {
@@ -156,17 +168,17 @@ function buildPersistence(db) {
 
   const insertExitEvent = db.prepare(`
     INSERT INTO exit_events (
-      created_at, symbol, exit_reason, trigger_percent, close_percent, side, qty, mark_price, response_json
+      created_at, bot_id, symbol, exit_reason, trigger_percent, close_percent, side, qty, mark_price, response_json
     ) VALUES (
-      @created_at, @symbol, @exit_reason, @trigger_percent, @close_percent, @side, @qty, @mark_price, @response_json
+      @created_at, @bot_id, @symbol, @exit_reason, @trigger_percent, @close_percent, @side, @qty, @mark_price, @response_json
     )
   `);
 
   const insertBreakEvenEvent = db.prepare(`
     INSERT INTO break_even_events (
-      created_at, symbol, event_type, trigger_percent, side, entry_price, mark_price, response_json
+      created_at, bot_id, symbol, event_type, trigger_percent, side, entry_price, mark_price, response_json
     ) VALUES (
-      @created_at, @symbol, @event_type, @trigger_percent, @side, @entry_price, @mark_price, @response_json
+      @created_at, @bot_id, @symbol, @event_type, @trigger_percent, @side, @entry_price, @mark_price, @response_json
     )
   `);
 

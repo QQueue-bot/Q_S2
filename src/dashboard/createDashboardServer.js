@@ -123,7 +123,7 @@ function loadExecutionTimeline(dbPath) {
     if (hasExitEvents) {
       const rows = db.prepare(`
         SELECT created_at AS timestamp, 'EXIT' AS eventType, exit_reason AS title,
-               exit_reason AS status, side, qty, NULL AS botId
+               exit_reason AS status, side, qty, bot_id AS botId
         FROM exit_events
         ORDER BY id DESC
         LIMIT 15
@@ -134,7 +134,7 @@ function loadExecutionTimeline(dbPath) {
     if (hasBreakEvenEvents) {
       const rows = db.prepare(`
         SELECT created_at AS timestamp, 'BREAK EVEN' AS eventType, event_type AS title,
-               event_type AS status, side, NULL AS qty, NULL AS botId
+               event_type AS status, side, NULL AS qty, bot_id AS botId
         FROM break_even_events
         ORDER BY id DESC
         LIMIT 15
@@ -183,15 +183,17 @@ function renderTradeSummaryPanel(summaryState) {
   }
 
   const { jsonSummary, textSummary } = summaryState;
+  const generatedAt = jsonSummary?.generatedAt || 'n/a';
+  const sourceDbPath = jsonSummary?.trade?.sourceDbPath || jsonSummary?.sourceDbPath || 'n/a';
   return `
     <div class="signal-item">
-      <div><strong>Generated:</strong> <code>${jsonSummary.generatedAt}</code></div>
-      <div><strong>Source DB:</strong> <code>${jsonSummary.trade.sourceDbPath}</code></div>
-      <div style="margin-top:8px; white-space:pre-wrap;">${textSummary}</div>
+      <div><strong>Generated:</strong> <code>${generatedAt}</code></div>
+      <div><strong>Source DB:</strong> <code>${sourceDbPath}</code></div>
+      <div style="margin-top:8px; white-space:pre-wrap;">${textSummary || 'No summary text available.'}</div>
     </div>
     <details class="json-block">
       <summary>Raw JSON</summary>
-      <pre>${JSON.stringify(jsonSummary, null, 2)}</pre>
+      <pre>${JSON.stringify(jsonSummary || {}, null, 2)}</pre>
     </details>
   `;
 }
@@ -371,6 +373,7 @@ function renderDashboardHtml({ title = 'S2 Dashboard', runtime = {}, signals = [
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta http-equiv="refresh" content="15">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${title}</title>
   <style>
@@ -378,13 +381,17 @@ function renderDashboardHtml({ title = 'S2 Dashboard', runtime = {}, signals = [
     body {
       margin: 0;
       font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #0b1020;
+      background: linear-gradient(180deg, #0b1020 0%, #10192f 100%);
       color: #e5e7eb;
     }
     header {
       padding: 24px;
       border-bottom: 1px solid #1f2937;
-      background: #111827;
+      background: rgba(17, 24, 39, 0.92);
+      position: sticky;
+      top: 0;
+      backdrop-filter: blur(8px);
+      z-index: 5;
     }
     main {
       padding: 24px;
@@ -464,10 +471,11 @@ function renderDashboardHtml({ title = 'S2 Dashboard', runtime = {}, signals = [
   <header>
     <h1>${title}</h1>
     <div class="meta">
-      <div><strong>Mode:</strong> internal-only scaffold</div>
+      <div><strong>Mode:</strong> read-only operator dashboard</div>
+      <div><strong>Refresh:</strong> every 15 seconds</div>
       <div><strong>Runtime path:</strong> <code>${runtime.path || 'Q_S2 workspace'}</code></div>
       <div><strong>Environment:</strong> <code>${runtime.environment || 'demo / internal'}</code></div>
-      <div><strong>Status:</strong> basic scaffold online</div>
+      <div><strong>Status:</strong> operator-ready dashboard</div>
     </div>
   </header>
   <main>
@@ -489,7 +497,7 @@ function createDashboardServer(options = {}) {
   const signalDbPath = runtime.dbPath || '/tmp/qs2_review/data/s2.sqlite';
 
   const server = http.createServer(async (req, res) => {
-    if (req.method !== 'GET') {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
       res.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('Method not allowed');
       return;
@@ -513,8 +521,13 @@ function createDashboardServer(options = {}) {
       settingsPath: runtime.settingsPath || '/tmp/qs2_review/config/settings.json',
       path: runtime.path || '/tmp/qs2_review',
     });
+    const html = renderDashboardHtml({ title, runtime, signals, positionState, executionEvents, latestSummary, healthState });
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(renderDashboardHtml({ title, runtime, signals, positionState, executionEvents, latestSummary, healthState }));
+    if (req.method === 'HEAD') {
+      res.end();
+      return;
+    }
+    res.end(html);
   });
 
   return {
