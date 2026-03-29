@@ -64,6 +64,19 @@ function initSchema(db) {
       status TEXT NOT NULL,
       response_json TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS exit_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      exit_reason TEXT NOT NULL,
+      trigger_percent REAL NOT NULL,
+      close_percent REAL NOT NULL,
+      side TEXT NOT NULL,
+      qty TEXT NOT NULL,
+      mark_price REAL NOT NULL,
+      response_json TEXT
+    );
   `);
 }
 
@@ -117,6 +130,14 @@ function buildPersistence(db) {
     )
   `);
 
+  const insertExitEvent = db.prepare(`
+    INSERT INTO exit_events (
+      created_at, symbol, exit_reason, trigger_percent, close_percent, side, qty, mark_price, response_json
+    ) VALUES (
+      @created_at, @symbol, @exit_reason, @trigger_percent, @close_percent, @side, @qty, @mark_price, @response_json
+    )
+  `);
+
   return {
     recordWebhookEvent(event) {
       return insertWebhookEvent.run(event);
@@ -139,6 +160,9 @@ function buildPersistence(db) {
     recordOrderAttempt(attempt) {
       return insertOrderAttempt.run(attempt);
     },
+    recordExitEvent(event) {
+      return insertExitEvent.run(event);
+    },
     getWebhookEvents() {
       return db.prepare('SELECT * FROM raw_webhook_events ORDER BY id ASC').all();
     },
@@ -153,6 +177,9 @@ function buildPersistence(db) {
     },
     getOrderAttempts() {
       return db.prepare('SELECT * FROM order_attempts ORDER BY id ASC').all();
+    },
+    getExitEvents() {
+      return db.prepare('SELECT * FROM exit_events ORDER BY id ASC').all();
     },
   };
 }

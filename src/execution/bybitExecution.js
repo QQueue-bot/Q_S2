@@ -162,6 +162,59 @@ async function closeOppositePosition({ symbol, parsedSignal, livePosition, crede
   };
 }
 
+function computePnlPercent(positionSide, entryPrice, markPrice) {
+  if (!entryPrice || !markPrice) return null;
+  const entry = Number(entryPrice);
+  const mark = Number(markPrice);
+  if (!entry || !mark) return null;
+  if (positionSide === 'Buy') {
+    return ((mark - entry) / entry) * 100;
+  }
+  if (positionSide === 'Sell') {
+    return ((entry - mark) / entry) * 100;
+  }
+  return null;
+}
+
+function evaluateTpSl(settings, livePosition) {
+  if (!livePosition) return null;
+  const pnlPercent = computePnlPercent(livePosition.side, livePosition.avgPrice, livePosition.markPrice);
+  if (pnlPercent === null) return null;
+
+  const tpLevels = (settings.takeProfit?.levels || []).filter(level => level.enabled && level.triggerPercent > 0 && level.closePercent > 0)
+    .sort((a, b) => a.triggerPercent - b.triggerPercent);
+
+  const reachedTakeProfits = tpLevels.filter(level => pnlPercent >= level.triggerPercent);
+  if (reachedTakeProfits.length > 0) {
+    const level = reachedTakeProfits[reachedTakeProfits.length - 1];
+    return {
+      type: 'take_profit',
+      triggerPercent: level.triggerPercent,
+      closePercent: level.closePercent,
+      pnlPercent,
+    };
+  }
+
+  if (settings.stopLoss?.enabled && settings.stopLoss?.triggerPercent > 0 && pnlPercent <= -Math.abs(settings.stopLoss.triggerPercent)) {
+    return {
+      type: 'stop_loss',
+      triggerPercent: settings.stopLoss.triggerPercent,
+      closePercent: 100,
+      pnlPercent,
+    };
+  }
+
+  return {
+    type: 'none',
+    pnlPercent,
+  };
+}
+
+function computeCloseQty(positionSize, closePercent, qtyStep) {
+  const rawQty = Number(positionSize) * (Number(closePercent) / 100);
+  return floorToStep(rawQty, qtyStep).toFixed(decimalPlaces(qtyStep));
+}
+
 function resolvePersistence(options, settingsPath, settings) {
   const configuredDbPath = path.resolve(path.dirname(settingsPath), '..', settings.storage.databasePath.replace(/^\.\//, ''));
   const candidateDbPaths = [
@@ -186,6 +239,43 @@ function resolvePersistence(options, settingsPath, settings) {
   const db = createDatabase(fallbackDbPath);
   initSchema(db);
   return { dbPath: fallbackDbPath, db, persistence: buildPersistence(db) };
+}
+
+async function executeCloseOrder({ symbol, livePosition, closePercent, exitReason, triggerPercent, credentials, persistence }) {
+  const instrument = await getInstrumentInfo(symbol);
+  const qtyStep = Number(instrument.lotSizeFilter.qtyStep);
+  const requestedQty = closePercent >= 100 ? Number(livePosition.size).toFixed(decimalPlaces(qtyStep)) : computeCloseQty(livePosition.size, closePercent, qtyStep);
+  const closeSide = livePosition.side === 'Buy' ? 'Sell' : 'Buy';
+  const payload = {
+    category: 'linear',
+    symbol,
+    side: closeSide,
+    orderType: 'Market',
+    qty: requestedQty,
+    positionIdx: 0,
+    reduceOnly: true,
+  };
+  const result = await bybitPrivatePost('/v5/order/create', payload, credentials);
+  persistence.recordExitEvent({
+    created_at: new Date().toISOString(),
+    symbol,
+    exit_reason: exitReason,
+    trigger_percent: Number(triggerPercent),
+    close_percent: Number(closePercent),
+    side: closeSide,
+    qty: requestedQty,
+    mark_price: Number(livePosition.markPrice || 0),
+    response_json: JSON.stringify(result.json),
+  });
+  return {
+    ok: result.ok && result.json.retCode === 0,
+    exitReason,
+    triggerPercent,
+    closePercent,
+    side: closeSide,
+    qty: requestedQty,
+    response: result.json,
+  };
 }
 
 async function executePaperTrade(parsedSignal, options = {}) {
@@ -288,9 +378,56 @@ async function executePaperTrade(parsedSignal, options = {}) {
   };
 }
 
+async function manageTpSl(options = {}) {
+  const settingsPath = options.settingsPath || path.join(__dirname, '..', '..', 'config', 'settings.json');
+  const envPath = options.envPath || path.join(__dirname, '..', '..', '.env');
+  loadProjectEnv(envPath);
+
+  const apiKey = process.env.BYBIT_TESTNET_API_KEY;
+  const apiSecret = process.env.BYBIT_TESTNET_API_SECRET;
+  if (!apiKey || !apiSecret) {
+    throw new Error('Missing BYBIT_TESTNET_API_KEY or BYBIT_TESTNET_API_SECRET in project .env');
+  }
+
+  const { settings } = loadAndValidateSettings(settingsPath);
+  const { dbPath, persistence } = resolvePersistence(options, settingsPath, settings);
+  const symbol = settings.trading.defaultSymbol;
+  const credentials = { apiKey, apiSecret };
+  const livePosition = options.livePositionOverride || await getLivePosition(symbol, credentials);
+  if (!livePosition) {
+    return { ok: true, action: 'no_position', dbPath };
+  }
+
+  const decision = evaluateTpSl(settings, livePosition);
+  if (!decision || decision.type === 'none') {
+    return { ok: true, action: 'hold', dbPath, decision };
+  }
+
+  const closeResult = await executeCloseOrder({
+    symbol,
+    livePosition,
+    closePercent: decision.closePercent,
+    exitReason: decision.type,
+    triggerPercent: decision.triggerPercent,
+    credentials,
+    persistence,
+  });
+
+  return {
+    ok: closeResult.ok,
+    action: decision.type,
+    dbPath,
+    decision,
+    closeResult,
+  };
+}
+
 module.exports = {
   executePaperTrade,
+  manageTpSl,
   computeOrderSizing,
+  computePnlPercent,
+  evaluateTpSl,
   getLivePosition,
   isOppositePosition,
   closeOppositePosition,
