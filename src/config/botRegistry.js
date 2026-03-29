@@ -27,6 +27,15 @@ function loadBotRegistry(registryPath = path.join(__dirname, '..', '..', 'config
     if (!bot.settingsRef || typeof bot.settingsRef !== 'string') {
       throw new Error(`Bot ${bot.botId} must include settingsRef`);
     }
+    if (!bot.credentialRef || typeof bot.credentialRef !== 'object' || Array.isArray(bot.credentialRef)) {
+      throw new Error(`Bot ${bot.botId} must include credentialRef object`);
+    }
+    if (!bot.credentialRef.apiKeyEnv || typeof bot.credentialRef.apiKeyEnv !== 'string') {
+      throw new Error(`Bot ${bot.botId} must include credentialRef.apiKeyEnv`);
+    }
+    if (!bot.credentialRef.apiSecretEnv || typeof bot.credentialRef.apiSecretEnv !== 'string') {
+      throw new Error(`Bot ${bot.botId} must include credentialRef.apiSecretEnv`);
+    }
   }
 
   return parsed;
