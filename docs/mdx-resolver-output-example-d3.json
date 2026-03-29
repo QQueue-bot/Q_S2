@@ -1,0 +1,57 @@
+{
+  "botMeta": {
+    "botName": "IP",
+    "asset": "IPUSDT"
+  },
+  "selectedProfile": "balanced",
+  "runtimeSettings": {
+    "positionSizing": {
+      "leverage": 4
+    },
+    "takeProfit": {
+      "enabled": true,
+      "levels": [
+        { "index": 1, "triggerPercent": 4.27, "closePercent": 8, "enabled": true },
+        { "index": 2, "triggerPercent": 6.98, "closePercent": 40, "enabled": true },
+        { "index": 3, "triggerPercent": 9.91, "closePercent": 12, "enabled": true },
+        { "index": 4, "triggerPercent": 15.03, "closePercent": 12, "enabled": true },
+        { "index": 5, "triggerPercent": 33.21, "closePercent": 14, "enabled": true },
+        { "index": 6, "triggerPercent": 53.87, "closePercent": 14, "enabled": true }
+      ]
+    },
+    "stopLoss": {
+      "enabled": true,
+      "triggerPercent": 6
+    },
+    "breakEven": {
+      "enabled": true,
+      "triggerPercent": 4.27,
+      "sourceRule": "slToBeTrigger=TP1"
+    }
+  },
+  "metadata": {
+    "signalBotSourceMeta": {
+      "optimizedPeriod": "180 Days",
+      "exchange": "Bybit",
+      "timeframe": "165m",
+      "signalSetting": 4,
+      "baseline": "TMA",
+      "baselineValue": 45,
+      "slType": "ATR",
+      "slValue": 5
+    },
+    "sourcePerformanceMeta": {
+      "performance30d": 19.12,
+      "performance90d": 75.09,
+      "performance180d": 653.34,
+      "performance360d": null,
+      "winrate": 75,
+      "profitFactor": 3.543
+    },
+    "profilePerformanceMeta": {}
+  },
+  "warnings": [
+    "slType is metadata-only in D3 and not runtime-mapped: ATR",
+    "slValue is metadata-only in D3 and not runtime-mapped"
+  ]
+}
