@@ -99,6 +99,93 @@ function renderSignalFeed(signals = []) {
   return `<div class="signal-list">${items}</div>`;
 }
 
+function loadExecutionTimeline(dbPath) {
+  try {
+    const db = new Database(dbPath, { readonly: true });
+    const timeline = [];
+
+    const hasOrderAttempts = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='order_attempts'").get();
+    const hasExitEvents = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='exit_events'").get();
+    const hasBreakEvenEvents = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='break_even_events'").get();
+    const hasStagedEntryEvents = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='staged_entry_events'").get();
+
+    if (hasOrderAttempts) {
+      const rows = db.prepare(`
+        SELECT created_at AS timestamp, 'ORDER' AS eventType, signal AS title, status, side, qty, bot_id AS botId
+        FROM order_attempts
+        ORDER BY id DESC
+        LIMIT 15
+      `).all();
+      timeline.push(...rows);
+    }
+
+    if (hasExitEvents) {
+      const rows = db.prepare(`
+        SELECT created_at AS timestamp, 'EXIT' AS eventType, exit_reason AS title,
+               exit_reason AS status, side, qty, NULL AS botId
+        FROM exit_events
+        ORDER BY id DESC
+        LIMIT 15
+      `).all();
+      timeline.push(...rows);
+    }
+
+    if (hasBreakEvenEvents) {
+      const rows = db.prepare(`
+        SELECT created_at AS timestamp, 'BREAK EVEN' AS eventType, event_type AS title,
+               event_type AS status, side, NULL AS qty, NULL AS botId
+        FROM break_even_events
+        ORDER BY id DESC
+        LIMIT 15
+      `).all();
+      timeline.push(...rows);
+    }
+
+    if (hasStagedEntryEvents) {
+      const rows = db.prepare(`
+        SELECT created_at AS timestamp, 'STAGED ENTRY' AS eventType, stage_name AS title,
+               status, NULL AS side, qty, bot_id AS botId
+        FROM staged_entry_events
+        ORDER BY id DESC
+        LIMIT 15
+      `).all();
+      timeline.push(...rows);
+    }
+
+    db.close();
+
+    return timeline.sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp))).slice(0, 20);
+  } catch {
+    return [];
+  }
+}
+
+function renderExecutionTimeline(events = []) {
+  if (!events.length) {
+    return '<p>No execution events found yet.</p>';
+  }
+
+  const items = events.map(event => {
+    const statusClass = /failed|error/i.test(event.status || '') ? 'status-failed'
+      : /skipped/i.test(event.status || '') ? 'status-skipped'
+      : /submitted|armed|take_profit|stop_loss|closed/i.test(event.status || '') ? 'status-success'
+      : 'status-neutral';
+    return `
+      <div class="signal-item">
+        <div><strong>${event.timestamp || 'unknown time'}</strong></div>
+        <div><span class="label">Type:</span> <code>${event.eventType}</code></div>
+        <div><span class="label">Event:</span> <code>${event.title || 'n/a'}</code></div>
+        ${event.botId ? `<div><span class="label">Bot:</span> <code>${event.botId}</code></div>` : ''}
+        ${event.side ? `<div><span class="label">Side:</span> <code>${event.side}</code></div>` : ''}
+        ${event.qty ? `<div><span class="label">Qty:</span> <code>${event.qty}</code></div>` : ''}
+        <div><span class="label">Status:</span> <code class="${statusClass}">${event.status || 'unknown'}</code></div>
+      </div>
+    `;
+  }).join('\n');
+
+  return `<div class="signal-list">${items}</div>`;
+}
+
 function renderPositionPanel(positionState = {}) {
   const { position, orders = [], error } = positionState;
   if (error) {
@@ -133,7 +220,7 @@ function renderPositionPanel(positionState = {}) {
   return `${positionHtml}<div style="height:12px"></div>${ordersHtml}`;
 }
 
-function renderDashboardHtml({ title = 'S2 Dashboard', runtime = {}, signals = [], positionState = {} } = {}) {
+function renderDashboardHtml({ title = 'S2 Dashboard', runtime = {}, signals = [], positionState = {}, executionEvents = [] } = {}) {
   const sections = [
     {
       id: 'signals',
@@ -148,7 +235,7 @@ function renderDashboardHtml({ title = 'S2 Dashboard', runtime = {}, signals = [
     {
       id: 'events',
       title: 'Execution Events',
-      body: 'Placeholder for Sprint B4 execution event timeline.',
+      body: renderExecutionTimeline(executionEvents),
     },
     {
       id: 'summary',
@@ -226,6 +313,18 @@ function renderDashboardHtml({ title = 'S2 Dashboard', runtime = {}, signals = [
     .label {
       color: #93c5fd;
     }
+    .status-success {
+      color: #86efac;
+    }
+    .status-failed {
+      color: #fca5a5;
+    }
+    .status-skipped {
+      color: #fcd34d;
+    }
+    .status-neutral {
+      color: #cbd5e1;
+    }
     h1, h2, p { margin: 0; }
     h1 { font-size: 28px; }
     h2 { font-size: 16px; margin-bottom: 10px; }
@@ -275,9 +374,10 @@ function createDashboardServer(options = {}) {
     }
 
     const signals = loadRecentSignals(signalDbPath);
+    const executionEvents = loadExecutionTimeline(signalDbPath);
     const positionState = await loadCurrentPositionAndOrders('BTCUSDT');
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(renderDashboardHtml({ title, runtime, signals, positionState }));
+    res.end(renderDashboardHtml({ title, runtime, signals, positionState, executionEvents }));
   });
 
   return {

@@ -67,13 +67,21 @@ function createWebhookServer(options = {}) {
         const risk = riskEngine.evaluate(parsedSignal);
         logger.info('Risk evaluation result', { risk });
 
-        let execution = null;
         if (risk.allowed && risk.actionable) {
-          execution = await executePaperTrade(parsedSignal, {
-            settingsPath,
-            envPath: '/home/ubuntu/.openclaw/workspace/.env',
+          setImmediate(async () => {
+            try {
+              const execution = await executePaperTrade(parsedSignal, {
+                settingsPath,
+                envPath: '/home/ubuntu/.openclaw/workspace/.env',
+              });
+              logger.info('Execution result', { execution });
+            } catch (executionError) {
+              logger.warn('Background execution failure', {
+                error: executionError.message,
+                parsedSignal,
+              });
+            }
           });
-          logger.info('Execution result', { execution });
         }
 
         return json(res, 200, {
@@ -81,7 +89,7 @@ function createWebhookServer(options = {}) {
           validation,
           parsedSignal,
           risk,
-          execution,
+          executionQueued: Boolean(risk.allowed && risk.actionable),
           tradingEnabled: settings.trading.enabled,
         });
       } catch (error) {
