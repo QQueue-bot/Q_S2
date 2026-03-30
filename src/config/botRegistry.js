@@ -30,6 +30,9 @@ function loadBotRegistry(registryPath = path.join(__dirname, '..', '..', 'config
     if (!bot.credentialRef || typeof bot.credentialRef !== 'object' || Array.isArray(bot.credentialRef)) {
       throw new Error(`Bot ${bot.botId} must include credentialRef object`);
     }
+    if (!bot.mdxSourceRef || typeof bot.mdxSourceRef !== 'string') {
+      throw new Error(`Bot ${bot.botId} must include mdxSourceRef`);
+    }
     if (!bot.credentialRef.apiKeyEnv || typeof bot.credentialRef.apiKeyEnv !== 'string') {
       throw new Error(`Bot ${bot.botId} must include credentialRef.apiKeyEnv`);
     }

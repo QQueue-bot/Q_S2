@@ -2,6 +2,7 @@ const path = require('path');
 const { loadBotRegistry } = require('./botRegistry');
 const { resolveBotSettings } = require('./resolveBotSettings');
 const { resolveBotCredentials } = require('./resolveBotCredentials');
+const { resolveBotMdxSource } = require('./resolveBotMdxSource');
 
 function resolveBotContext(botId, options = {}) {
   const registryPath = options.registryPath || path.join(__dirname, '..', '..', 'config', 'bots.json');
@@ -9,6 +10,7 @@ function resolveBotContext(botId, options = {}) {
   const allowedBots = registry.bots.filter(bot => bot.enabled).map(bot => bot.botId);
 
   const resolved = resolveBotSettings(botId, { registryPath });
+  const mdxSource = resolveBotMdxSource(botId, { registryPath });
   const credentials = resolveBotCredentials(botId, {
     registryPath,
     envPath: options.envPath || '/home/ubuntu/.openclaw/.env',
@@ -24,6 +26,7 @@ function resolveBotContext(botId, options = {}) {
     settings: resolved.settings,
     validation: resolved.validation,
     bot: resolved.bot,
+    mdxSource,
     credentials,
     allowedBots,
     registryPath,

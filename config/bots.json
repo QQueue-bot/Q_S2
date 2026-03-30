@@ -9,6 +9,7 @@
         "apiKeyEnv": "S2_BOT1_API_KEY",
         "apiSecretEnv": "S2_BOT1_API_SECRET"
       },
+      "mdxSourceRef": "../mdx/Bot1.source.json",
       "notes": "Primary verified live-routed bot for Milestone C"
     },
     {
@@ -20,6 +21,7 @@
         "apiKeyEnv": "S2_BOT2_API_KEY",
         "apiSecretEnv": "S2_BOT2_API_SECRET"
       },
+      "mdxSourceRef": "../mdx/Bot2.source.json",
       "notes": "Prepared for later activation; disabled by default"
     },
     {
@@ -31,6 +33,7 @@
         "apiKeyEnv": "S2_BOT3_API_KEY",
         "apiSecretEnv": "S2_BOT3_API_SECRET"
       },
+      "mdxSourceRef": "../mdx/Bot3.source.json",
       "notes": "Prepared for later activation; disabled by default"
     },
     {
@@ -42,6 +45,7 @@
         "apiKeyEnv": "S2_BOT4_API_KEY",
         "apiSecretEnv": "S2_BOT4_API_SECRET"
       },
+      "mdxSourceRef": "../mdx/Bot4.source.json",
       "notes": "Prepared for later activation; disabled by default"
     },
     {
@@ -53,6 +57,7 @@
         "apiKeyEnv": "S2_BOT5_API_KEY",
         "apiSecretEnv": "S2_BOT5_API_SECRET"
       },
+      "mdxSourceRef": "../mdx/Bot5.source.json",
       "notes": "Prepared for later activation; disabled by default"
     },
     {
@@ -64,6 +69,7 @@
         "apiKeyEnv": "S2_BOT6_API_KEY",
         "apiSecretEnv": "S2_BOT6_API_SECRET"
       },
+      "mdxSourceRef": "../mdx/Bot6.source.json",
       "notes": "Prepared for later activation; disabled by default"
     },
     {
@@ -75,6 +81,7 @@
         "apiKeyEnv": "S2_BOT7_API_KEY",
         "apiSecretEnv": "S2_BOT7_API_SECRET"
       },
+      "mdxSourceRef": "../mdx/Bot7.source.json",
       "notes": "Prepared for later activation; disabled by default"
     },
     {
@@ -86,6 +93,7 @@
         "apiKeyEnv": "S2_BOT8_API_KEY",
         "apiSecretEnv": "S2_BOT8_API_SECRET"
       },
+      "mdxSourceRef": "../mdx/Bot8.source.json",
       "notes": "Prepared for later activation; disabled by default"
     }
   ]
