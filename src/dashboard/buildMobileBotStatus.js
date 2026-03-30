@@ -44,6 +44,7 @@ async function fetchBotStatus(bot, registryPath, envPath) {
     ]);
 
     let balance = null;
+    let balanceStatus = 'unavailable';
     if (wallet?.retCode === 0) {
       const coins = wallet?.result?.list?.[0]?.coin || [];
       const usdt = coins.find((coin) => coin.coin === 'USDT');
@@ -51,6 +52,10 @@ async function fetchBotStatus(bot, registryPath, envPath) {
         const walletBalance = Number(usdt.walletBalance || 0);
         const unrealisedPnl = Number(usdt.unrealisedPnl || 0);
         balance = walletBalance + unrealisedPnl;
+        balanceStatus = 'ok';
+      } else {
+        balance = 0;
+        balanceStatus = 'empty';
       }
     }
 
@@ -66,7 +71,7 @@ async function fetchBotStatus(bot, registryPath, envPath) {
       enabled: bot.enabled,
       tradeState,
       balance,
-      balanceStatus: balance === null ? 'unavailable' : 'ok',
+      balanceStatus,
     };
   } catch (error) {
     return {

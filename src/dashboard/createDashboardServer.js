@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 const axios = require('axios');
 const crypto = require('crypto');
 const { generateTradeSummary } = require('../reporting/tradeSummary');
+const { buildMobileBotStatus } = require('./buildMobileBotStatus');
 
 const BYBIT_BASE_URL = process.env.BYBIT_BASE_URL || 'https://api-demo.bybit.com';
 dotenv.config({ path: '/home/ubuntu/.openclaw/workspace/.env' });
@@ -333,6 +334,72 @@ function renderPositionPanel(positionState = {}) {
   return `${positionHtml}<div style="height:12px"></div>${ordersHtml}`;
 }
 
+function renderMobileBotStatusHtml(status = {}) {
+  const totals = status.totals || {};
+  const bots = Array.isArray(status.bots) ? status.bots : [];
+
+  const botRows = bots.map(bot => {
+    const enabled = bot.enabled ? 'Enabled' : 'Disabled';
+    const balance = bot.balanceStatus === 'ok' && Number.isFinite(bot.balance)
+      ? `${bot.balance.toFixed(2)} USDT`
+      : 'Balance unavailable';
+    const stateClass = bot.tradeState === 'Long' || bot.tradeState === 'Short' ? 'trade-live' : 'trade-flat';
+    const enabledClass = bot.enabled ? 'bot-enabled' : 'bot-disabled';
+
+    return `<div class="bot-card ${enabledClass}">
+      <div class="bot-top">
+        <div class="bot-name">${bot.botId || 'Unknown bot'}</div>
+        <div class="bot-state ${stateClass}">${bot.tradeState || 'Unknown'}</div>
+      </div>
+      <div class="bot-meta">${enabled} · ${bot.symbol || 'n/a'}</div>
+      <div class="bot-balance">${balance}</div>
+    </div>`;
+  }).join('\n');
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="refresh" content="15">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>S2 Mobile Bot Status</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; }
+    .wrap { padding: 14px; max-width: 480px; margin: 0 auto; }
+    .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+    .summary-card { background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 10px; text-align: center; }
+    .summary-card .label { font-size: 12px; opacity: 0.8; }
+    .summary-card .value { font-size: 20px; font-weight: 700; margin-top: 2px; }
+    .bot-list { display: flex; flex-direction: column; gap: 8px; }
+    .bot-card { background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 12px; }
+    .bot-disabled { opacity: 0.72; }
+    .bot-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .bot-name { font-size: 18px; font-weight: 700; }
+    .bot-state { font-size: 13px; font-weight: 700; padding: 4px 8px; border-radius: 999px; }
+    .trade-live { background: #14532d; color: #bbf7d0; }
+    .trade-flat { background: #1e293b; color: #cbd5e1; }
+    .bot-meta { font-size: 13px; opacity: 0.82; margin-top: 4px; }
+    .bot-balance { font-size: 22px; font-weight: 800; margin-top: 8px; }
+    .generated { font-size: 12px; opacity: 0.6; text-align: center; margin-top: 12px; }
+    .freshness { font-size: 12px; text-align: center; margin-top: 6px; color: #93c5fd; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="summary">
+      <div class="summary-card"><div class="label">Bots</div><div class="value">${totals.bots || 0}</div></div>
+      <div class="summary-card"><div class="label">Enabled</div><div class="value">${totals.enabled || 0}</div></div>
+      <div class="summary-card"><div class="label">In Trade</div><div class="value">${totals.inTrade || 0}</div></div>
+    </div>
+    <div class="bot-list">${botRows || '<div class="bot-card">No bots found.</div>'}</div>
+    <div class="generated">Updated ${status.generatedAt || 'n/a'}</div>
+    <div class="freshness">Auto-refresh every 15s</div>
+  </div>
+</body>
+</html>`;
+}
+
 function renderDashboardHtml({ title = 'S2 Dashboard', runtime = {}, signals = [], positionState = {}, executionEvents = [], latestSummary = null, healthState = null } = {}) {
   const sections = [
     {
@@ -503,7 +570,47 @@ function createDashboardServer(options = {}) {
       return;
     }
 
-    if (req.url !== '/' && req.url !== '/index.html') {
+    const requestPath = String(req.url || '/').split('?')[0];
+
+    if (requestPath === '/api/mobile-bot-status') {
+      try {
+        const status = await buildMobileBotStatus();
+        const body = JSON.stringify(status, null, 2);
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        if (req.method === 'HEAD') {
+          res.end();
+          return;
+        }
+        res.end(body);
+      } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        if (req.method === 'HEAD') {
+          res.end();
+          return;
+        }
+        res.end(JSON.stringify({ error: 'Failed to build mobile bot status', details: error.message }));
+      }
+      return;
+    }
+
+    if (requestPath === '/mobile') {
+      try {
+        const status = await buildMobileBotStatus();
+        const html = renderMobileBotStatusHtml(status);
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        if (req.method === 'HEAD') {
+          res.end();
+          return;
+        }
+        res.end(html);
+      } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end(`Failed to render mobile bot status page: ${error.message}`);
+      }
+      return;
+    }
+
+    if (requestPath !== '/' && requestPath !== '/index.html') {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('Not found');
       return;
