@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 const axios = require('axios');
 const { loadAndValidateSettings } = require('../config/validateSettings');
 const { resolveBotContext } = require('../config/resolveBotContext');
+const { resolveDcaStrategy } = require('../config/resolveDcaStrategy');
 const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite');
 
 const DEFAULT_BYBIT_BASE_URL = 'https://api-demo.bybit.com';
@@ -439,8 +440,15 @@ async function executePaperTrade(parsedSignal, options = {}) {
     minNotionalValue: Number(lot.minNotionalValue),
   });
 
-  const stageDelaySeconds = options.stageDelaySeconds ?? 60;
-  const stageOneQty = computeCloseQty(sizing.qty, 50, Number(lot.qtyStep));
+  const dcaStrategy = resolveDcaStrategy({ profile: botContext.mdx?.profile || 'balanced' });
+  const triggerCandle = options.triggerCandle || null;
+  const recentCandles = options.recentCandles || [];
+  const { classifyTriggerCandle, shouldBlockDcaAdd } = require('./evaluateDcaEntry');
+  const impulse = classifyTriggerCandle(triggerCandle, recentCandles, dcaStrategy);
+  const delayCandles = impulse.impulsive ? dcaStrategy.addTiming.maxDelayCandles : dcaStrategy.addTiming.minDelayCandles;
+  const candleDurationSeconds = options.candleDurationSeconds ?? 60;
+  const stageDelaySeconds = delayCandles * candleDurationSeconds;
+  const stageOneQty = computeCloseQty(sizing.qty, dcaStrategy.entries.initialEntryPercent, Number(lot.qtyStep));
   const stageTwoQtyRaw = Number(sizing.qty) - Number(stageOneQty);
   const stageTwoQty = stageTwoQtyRaw.toFixed(decimalPlaces(Number(lot.qtyStep)));
 
@@ -469,23 +477,46 @@ async function executePaperTrade(parsedSignal, options = {}) {
 
   let delayedEntry = null;
   if (firstEntry.ok) {
+    persistence.recordDcaEvent({
+      created_at: new Date().toISOString(),
+      bot_id: parsedSignal.botId,
+      symbol,
+      event_type: 'dca_add_scheduled',
+      candle_delay: delayCandles,
+      status: 'scheduled',
+      details_json: JSON.stringify({ impulse, stageDelaySeconds, qty: stageTwoQty }),
+    });
     await new Promise(resolve => setTimeout(resolve, stageDelaySeconds * 1000));
-    const beArmed = hasBreakEvenArmed(persistence, symbol);
-    if (beArmed) {
+    const guardState = shouldBlockDcaAdd({
+      breakEvenArmed: dcaStrategy.guards.blockIfBreakEvenArmed && hasBreakEvenArmed(persistence, symbol),
+      takeProfitStarted: dcaStrategy.guards.blockIfTakeProfitStarted && (persistence.getExitEvents ? persistence.getExitEvents().some(event => event.symbol === symbol && event.exit_reason === 'take_profit') : false),
+      oppositeSignal: false,
+      regimeInvalid: false,
+    });
+    if (guardState.blocked) {
       persistence.recordStagedEntryEvent({
         created_at: new Date().toISOString(),
         symbol,
         bot_id: parsedSignal.botId,
-        stage_name: 'delayed_entry_50',
+        stage_name: 'dca_add_entry',
         delay_seconds: stageDelaySeconds,
         qty: stageTwoQty,
-        status: 'skipped_break_even_armed',
-        response_json: JSON.stringify({ skipped: true, reason: 'break_even_armed' }),
+        status: `skipped_${guardState.reasons.join('_')}`,
+        response_json: JSON.stringify({ skipped: true, reasons: guardState.reasons }),
+      });
+      persistence.recordDcaEvent({
+        created_at: new Date().toISOString(),
+        bot_id: parsedSignal.botId,
+        symbol,
+        event_type: 'dca_add_skipped',
+        candle_delay: delayCandles,
+        status: 'skipped',
+        details_json: JSON.stringify({ reasons: guardState.reasons, qty: stageTwoQty }),
       });
       delayedEntry = {
         ok: false,
         skipped: true,
-        reason: 'break_even_armed',
+        reasons: guardState.reasons,
         qty: stageTwoQty,
       };
     } else {
@@ -494,22 +525,31 @@ async function executePaperTrade(parsedSignal, options = {}) {
         side,
         qty: stageTwoQty,
         botId: parsedSignal.botId,
-        signal: `${parsedSignal.signal}_STAGE_2`,
+        signal: `${parsedSignal.signal}_DCA_ADD`,
         notionalUsd: Number(stageTwoQty) * Number(latestTick.last_price),
         credentials,
         persistence,
-        stageName: 'delayed_entry_50',
+        stageName: 'dca_add_entry',
         bybitBaseUrl,
       });
       persistence.recordStagedEntryEvent({
         created_at: new Date().toISOString(),
         symbol,
         bot_id: parsedSignal.botId,
-        stage_name: 'delayed_entry_50',
+        stage_name: 'dca_add_entry',
         delay_seconds: stageDelaySeconds,
         qty: stageTwoQty,
         status: secondEntry.ok ? 'submitted' : 'failed',
         response_json: JSON.stringify(secondEntry.response),
+      });
+      persistence.recordDcaEvent({
+        created_at: new Date().toISOString(),
+        bot_id: parsedSignal.botId,
+        symbol,
+        event_type: 'dca_add_executed',
+        candle_delay: delayCandles,
+        status: secondEntry.ok ? 'executed' : 'failed',
+        details_json: JSON.stringify({ impulse, qty: stageTwoQty, response: secondEntry.response }),
       });
       delayedEntry = secondEntry;
     }
@@ -524,6 +564,9 @@ async function executePaperTrade(parsedSignal, options = {}) {
     reversal,
     stagedEntry: {
       enabled: true,
+      strategy: dcaStrategy.mode,
+      impulse,
+      delayCandles,
       stageDelaySeconds,
       firstEntryQty: stageOneQty,
       delayedEntryQty: stageTwoQty,

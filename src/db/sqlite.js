@@ -103,6 +103,17 @@ function initSchema(db) {
       status TEXT NOT NULL,
       response_json TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS dca_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL,
+      bot_id TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      candle_delay INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      details_json TEXT
+    );
   `);
 
   const ensureColumn = (tableName, columnName, columnSql) => {
@@ -190,6 +201,14 @@ function buildPersistence(db) {
     )
   `);
 
+  const insertDcaEvent = db.prepare(`
+    INSERT INTO dca_events (
+      created_at, bot_id, symbol, event_type, candle_delay, status, details_json
+    ) VALUES (
+      @created_at, @bot_id, @symbol, @event_type, @candle_delay, @status, @details_json
+    )
+  `);
+
   return {
     recordWebhookEvent(event) {
       return insertWebhookEvent.run(event);
@@ -221,6 +240,9 @@ function buildPersistence(db) {
     recordStagedEntryEvent(event) {
       return insertStagedEntryEvent.run(event);
     },
+    recordDcaEvent(event) {
+      return insertDcaEvent.run(event);
+    },
     getWebhookEvents() {
       return db.prepare('SELECT * FROM raw_webhook_events ORDER BY id ASC').all();
     },
@@ -244,6 +266,9 @@ function buildPersistence(db) {
     },
     getStagedEntryEvents() {
       return db.prepare('SELECT * FROM staged_entry_events ORDER BY id ASC').all();
+    },
+    getDcaEvents() {
+      return db.prepare('SELECT * FROM dca_events ORDER BY id ASC').all();
     },
   };
 }
