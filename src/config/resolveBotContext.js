@@ -26,6 +26,7 @@ function resolveBotContext(botId, options = {}) {
     settings: resolved.settings,
     validation: resolved.validation,
     bot: resolved.bot,
+    mdx: resolved.mdx,
     mdxSource,
     credentials,
     allowedBots,

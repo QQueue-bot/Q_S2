@@ -2,6 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const { getBotById } = require('./botRegistry');
 const { loadAndValidateSettings } = require('./validateSettings');
+const { resolveMdxSettings } = require('./resolveMdxSettings');
+const { validateMdxRuntimeSettings } = require('./validateMdxRuntimeSettings');
 
 function resolveBotSettings(botId, options = {}) {
   const registryPath = options.registryPath || path.join(__dirname, '..', '..', 'config', 'bots.json');
@@ -23,12 +25,61 @@ function resolveBotSettings(botId, options = {}) {
   }
 
   const validated = loadAndValidateSettings(settingsPath);
+
+  if (bot.mdxSourceRef) {
+    const sourcePath = path.resolve(registryDir, bot.mdxSourceRef);
+    const mdxResolved = resolveMdxSettings({
+      sourcePath,
+      profile: bot.mdxProfile || 'balanced',
+    });
+    const mdxValidation = validateMdxRuntimeSettings(mdxResolved);
+    if (!mdxValidation.ok) {
+      throw new Error(`MDX-derived runtime settings invalid for ${botId}: ${mdxValidation.errors.join('; ')}`);
+    }
+
+    const mergedSettings = JSON.parse(JSON.stringify(validated.settings));
+    mergedSettings.positionSizing = {
+      ...mergedSettings.positionSizing,
+      ...mdxResolved.runtimeSettings.positionSizing,
+    };
+    mergedSettings.takeProfit = {
+      ...mergedSettings.takeProfit,
+      ...mdxResolved.runtimeSettings.takeProfit,
+    };
+    mergedSettings.stopLoss = {
+      ...mergedSettings.stopLoss,
+      ...mdxResolved.runtimeSettings.stopLoss,
+    };
+    mergedSettings.breakEven = {
+      ...mergedSettings.breakEven,
+      ...mdxResolved.runtimeSettings.breakEven,
+    };
+
+    return {
+      bot,
+      symbol: bot.symbol,
+      settingsPath,
+      settings: mergedSettings,
+      validation: validated.validation,
+      mdx: {
+        enabled: true,
+        profile: mdxResolved.selectedProfile,
+        sourcePath,
+        warnings: mdxValidation.warnings,
+        metadata: mdxResolved.metadata,
+      },
+    };
+  }
+
   return {
     bot,
     symbol: bot.symbol,
     settingsPath,
     settings: validated.settings,
     validation: validated.validation,
+    mdx: {
+      enabled: false,
+    },
   };
 }
 
