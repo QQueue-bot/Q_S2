@@ -1,14 +1,75 @@
 {
   "botMeta": {
-    "botName": "Bot2",
-    "asset": "BTCUSDT"
+    "botName": "NEAR",
+    "asset": "NEAR"
   },
-  "signalBotSourceMeta": {},
-  "sourcePerformanceMeta": {},
+  "signalBotSourceMeta": {
+    "optimizedPeriod": "180 Days",
+    "exchange": "Bitget",
+    "timeframe": "150m",
+    "signalSetting": 4,
+    "baseline": "VWMA",
+    "baselineValue": 12,
+    "slType": "ATR",
+    "slValue": 3.5
+  },
+  "sourcePerformanceMeta": {
+    "performance30d": 26.93,
+    "performance90d": 45.78,
+    "performance180d": 119.97,
+    "performance360d": null,
+    "winrate": 81.25,
+    "profitFactor": 3.029
+  },
   "defaultProfile": "balanced",
   "profiles": {
-    "safe": { "strategy": { "tpTargetsPercent": [3.74, 5.17, 9.14, 13.61, 23.57, 49.0], "tpAllocationsPercent": [26, 25, 15, 14, 11, 9], "stopLossPercent": 6, "slToBeTrigger": "TP1", "leverage": 2 }, "performanceMeta": {} },
-    "balanced": { "strategy": { "tpTargetsPercent": [4.27, 6.98, 9.91, 15.03, 33.21, 53.87], "tpAllocationsPercent": [8, 40, 12, 12, 14, 14], "stopLossPercent": 6, "slToBeTrigger": "TP1", "leverage": 4 }, "performanceMeta": {} },
-    "aggressive": { "strategy": { "tpTargetsPercent": [4.51, 7.67, 10.34, 15.6, 35.4, 57.35], "tpAllocationsPercent": [8, 27, 16, 15, 24, 10], "stopLossPercent": 6, "slToBeTrigger": "TP1", "leverage": 6 }, "performanceMeta": {} }
+    "safe": {
+      "strategy": {
+        "tpTargetsPercent": [2.89, 5.08, 5.88, 8.79, 14.96, 22.38],
+        "tpAllocationsPercent": [26, 25, 15, 14, 11, 9],
+        "stopLossPercent": 6,
+        "slToBeTrigger": "TP1",
+        "leverage": 1
+      },
+      "performanceMeta": {
+        "tradeCount": 48,
+        "winrate": 81.25,
+        "netProfit": 119.97,
+        "maxDrawdown": -10.18,
+        "avgTradeProfit": 2.5
+      }
+    },
+    "balanced": {
+      "strategy": {
+        "tpTargetsPercent": [4.22, 5.4, 6.73, 10.81, 16.2, 23.96],
+        "tpAllocationsPercent": [8, 42, 13, 13, 9, 15],
+        "stopLossPercent": 6,
+        "slToBeTrigger": "TP1",
+        "leverage": 4
+      },
+      "performanceMeta": {
+        "tradeCount": 48,
+        "winrate": 79.17,
+        "netProfit": 2207.67,
+        "maxDrawdown": -37.48,
+        "avgTradeProfit": 45.99
+      }
+    },
+    "aggressive": {
+      "strategy": {
+        "tpTargetsPercent": [4.87, 5.44, 7.18, 10.96, 16.23, 24.03],
+        "tpAllocationsPercent": [8, 28, 11, 23, 20, 10],
+        "stopLossPercent": 6,
+        "slToBeTrigger": "TP1",
+        "leverage": 6
+      },
+      "performanceMeta": {
+        "tradeCount": 48,
+        "winrate": 72.92,
+        "netProfit": 5476.63,
+        "maxDrawdown": -52.96,
+        "avgTradeProfit": 114.1
+      }
+    }
   }
 }

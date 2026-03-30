@@ -16,8 +16,13 @@ function validatePercentArray(name, value) {
 }
 
 function resolveBreakEvenTrigger(slToBeTrigger, strategy) {
-  if (slToBeTrigger === 'TP1') {
-    return strategy.tpTargetsPercent[0];
+  const mapping = {
+    TP1: 0,
+    TP2: 1,
+    TP3: 2,
+  };
+  if (Object.prototype.hasOwnProperty.call(mapping, slToBeTrigger)) {
+    return strategy.tpTargetsPercent[mapping[slToBeTrigger]];
   }
   throw new Error(`Unsupported SL to BE trigger: ${slToBeTrigger}`);
 }

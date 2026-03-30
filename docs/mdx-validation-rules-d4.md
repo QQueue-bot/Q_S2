@@ -14,7 +14,7 @@ The following conditions must hard-fail:
 - stop-loss trigger percent is missing, non-numeric, or <= 0
 - leverage is missing, non-numeric, or <= 0
 - break-even trigger percent cannot be resolved or is <= 0
-- `SL to BE` uses an unsupported reference (currently only `TP1` is supported)
+- `SL to BE` uses an unsupported reference (currently `TP1`, `TP2`, and `TP3` are supported)
 
 ## Warning rules
 

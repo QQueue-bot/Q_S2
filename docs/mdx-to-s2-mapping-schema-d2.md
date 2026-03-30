@@ -128,7 +128,7 @@ Rule:
 
 ### 1. Break-even trigger
 MDX source:
-- `slToBeTrigger = TP1`
+- `slToBeTrigger = TP1 | TP2 | TP3`
 
 S2 target:
 - `breakEven.triggerPercent`
@@ -136,6 +136,10 @@ S2 target:
 Rule:
 - if `slToBeTrigger = TP1`, then:
   - `breakEven.triggerPercent = tp1TargetPercent`
+- if `slToBeTrigger = TP2`, then:
+  - `breakEven.triggerPercent = tp2TargetPercent`
+- if `slToBeTrigger = TP3`, then:
+  - `breakEven.triggerPercent = tp3TargetPercent`
 
 General interpretation:
 - the break-even trigger is derived from a symbolic MDX reference to a TP milestone
@@ -265,7 +269,7 @@ Treatment:
 | `tpNAllocationPercent` | Direct | `takeProfit.levels[N].closePercent` | copy numeric percent |
 | `stopLossPercent` | Direct | `stopLoss.triggerPercent` | copy numeric percent |
 | `leverage` | Direct | `positionSizing.leverage` | copy numeric leverage |
-| `slToBeTrigger=TP1` | Derived | `breakEven.triggerPercent` | set to selected profile TP1 target percent |
+| `slToBeTrigger=TP1|TP2|TP3` | Derived | `breakEven.triggerPercent` | set to selected profile referenced TP target percent |
 | visible TP level pair | Derived | `takeProfit.levels[N].enabled` | enabled when target and allocation > 0 |
 | selected profile exists | Derived | profile selection | use `balanced` by default |
 | top-half settings | Metadata only | none | store only |

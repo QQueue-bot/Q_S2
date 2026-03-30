@@ -51,8 +51,8 @@ function validateMdxRuntimeSettings(resolved) {
     errors.push('breakEven.triggerPercent must be numeric and greater than 0');
   }
 
-  if (!breakEven?.sourceRule || !String(breakEven.sourceRule).includes('TP1')) {
-    errors.push('Only SL to BE = TP1 is supported currently');
+  if (!breakEven?.sourceRule || !/(TP1|TP2|TP3)/.test(String(breakEven.sourceRule))) {
+    errors.push('Only SL to BE = TP1, TP2, or TP3 is supported currently');
   }
 
   const leverage = runtimeSettings.positionSizing?.leverage;
