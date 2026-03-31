@@ -6,6 +6,11 @@ const { loadAndValidateSettings } = require('../config/validateSettings');
 const { resolveBotContext } = require('../config/resolveBotContext');
 const { createRiskEngine } = require('../risk/evaluateSignal');
 const { executePaperTrade } = require('../execution/bybitExecution');
+const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite');
+
+function isHeartbeatSignal(input) {
+  return typeof input === 'string' && input.trim().toUpperCase() === 'S2_HEARTBEAT';
+}
 
 function createWebhookServer(options = {}) {
   const {
@@ -21,6 +26,11 @@ function createWebhookServer(options = {}) {
     res.writeHead(statusCode, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(payload, null, 2));
   }
+
+  const dbPath = process.env.S2_DB_PATH || '/tmp/qs2_review/data/s2.sqlite';
+  const db = createDatabase(dbPath);
+  initSchema(db);
+  const persistence = buildPersistence(db);
 
   const server = http.createServer((req, res) => {
     const requestUrl = new URL(req.url, `http://${host}:${port}`);
@@ -60,6 +70,25 @@ function createWebhookServer(options = {}) {
 
       try {
         const { settings, validation } = loadAndValidateSettings(settingsPath);
+
+        if (isHeartbeatSignal(signalInput)) {
+          const heartbeatAt = new Date().toISOString();
+          persistence.recordHeartbeatEvent({
+            received_at: heartbeatAt,
+            source: 'tradingview',
+            raw_input: signalInput,
+            status: 'received',
+            details_json: JSON.stringify({ requestPath: requestUrl.pathname }),
+          });
+          return json(res, 200, {
+            ok: true,
+            heartbeat: true,
+            receivedAt: heartbeatAt,
+            staleAfterMinutes: 360,
+            executionQueued: false,
+          });
+        }
+
         const bootContext = resolveBotContext('Bot1');
         const parsedSignal = parseSignalString(signalInput, { allowedBots: bootContext.allowedBots });
         const botContext = resolveBotContext(parsedSignal.botId);

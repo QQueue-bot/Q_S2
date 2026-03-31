@@ -235,6 +235,8 @@ function loadHealthState(runtime) {
     tunnelStatus: 'unknown',
     lastSignalTime: null,
     lastExecutionTime: null,
+    lastHeartbeatTime: null,
+    heartbeatStale: null,
   };
 
   try {
@@ -255,8 +257,15 @@ function loadHealthState(runtime) {
     const db = new Database(runtime.dbPath || '/tmp/qs2_review/data/s2.sqlite', { readonly: true });
     const latestSignal = db.prepare("SELECT MAX(created_at) AS ts FROM order_attempts").get();
     const latestExecution = db.prepare("SELECT MAX(created_at) AS ts FROM staged_entry_events").get();
+    const hasHeartbeatEvents = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='heartbeat_events'").get();
+    const latestHeartbeat = hasHeartbeatEvents ? db.prepare("SELECT MAX(received_at) AS ts FROM heartbeat_events").get() : null;
     state.lastSignalTime = latestSignal?.ts || null;
     state.lastExecutionTime = latestExecution?.ts || null;
+    state.lastHeartbeatTime = latestHeartbeat?.ts || null;
+    if (state.lastHeartbeatTime) {
+      const ageMs = Date.now() - Date.parse(state.lastHeartbeatTime);
+      state.heartbeatStale = ageMs > (6 * 60 * 60 * 1000);
+    }
     db.close();
   } catch {}
 
@@ -296,6 +305,8 @@ function renderHealthPanel(health) {
       <div><span class="label">Tunnel Service:</span> ${serviceLabel(health.tunnelStatus)}</div>
       <div><span class="label">Last Signal:</span> <code>${health.lastSignalTime || 'n/a'}</code></div>
       <div><span class="label">Last Execution:</span> <code>${health.lastExecutionTime || 'n/a'}</code></div>
+      <div><span class="label">Last Heartbeat:</span> <code>${health.lastHeartbeatTime || 'n/a'}</code></div>
+      <div><span class="label">Heartbeat Fresh:</span> ${health.lastHeartbeatTime ? (health.heartbeatStale ? '<code class="status-failed">stale</code>' : '<code class="status-success">fresh</code>') : '<code class="status-neutral">unknown</code>'}</div>
     </div>
   `;
 }

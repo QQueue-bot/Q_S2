@@ -114,6 +114,15 @@ function initSchema(db) {
       status TEXT NOT NULL,
       details_json TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS heartbeat_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      received_at TEXT NOT NULL,
+      source TEXT NOT NULL,
+      raw_input TEXT NOT NULL,
+      status TEXT NOT NULL,
+      details_json TEXT
+    );
   `);
 
   const ensureColumn = (tableName, columnName, columnSql) => {
@@ -209,6 +218,14 @@ function buildPersistence(db) {
     )
   `);
 
+  const insertHeartbeatEvent = db.prepare(`
+    INSERT INTO heartbeat_events (
+      received_at, source, raw_input, status, details_json
+    ) VALUES (
+      @received_at, @source, @raw_input, @status, @details_json
+    )
+  `);
+
   return {
     recordWebhookEvent(event) {
       return insertWebhookEvent.run(event);
@@ -243,6 +260,12 @@ function buildPersistence(db) {
     recordDcaEvent(event) {
       return insertDcaEvent.run(event);
     },
+    recordHeartbeatEvent(event) {
+      return insertHeartbeatEvent.run({
+        ...event,
+        details_json: event.details_json || null,
+      });
+    },
     getWebhookEvents() {
       return db.prepare('SELECT * FROM raw_webhook_events ORDER BY id ASC').all();
     },
@@ -269,6 +292,12 @@ function buildPersistence(db) {
     },
     getDcaEvents() {
       return db.prepare('SELECT * FROM dca_events ORDER BY id ASC').all();
+    },
+    getHeartbeatEvents() {
+      return db.prepare('SELECT * FROM heartbeat_events ORDER BY id ASC').all();
+    },
+    getLatestHeartbeatEvent() {
+      return db.prepare('SELECT * FROM heartbeat_events ORDER BY id DESC LIMIT 1').get() || null;
     },
   };
 }
