@@ -1,7 +1,9 @@
 const crypto = require('crypto');
+const path = require('path');
 const axios = require('axios');
 const { loadBotRegistry } = require('../config/botRegistry');
 const { resolveBotCredentials } = require('../config/resolveBotCredentials');
+const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite');
 
 function signRequest({ apiKey, apiSecret, timestamp, recvWindow, query = '' }) {
   const payloadToSign = timestamp + apiKey + recvWindow + query;
@@ -86,12 +88,50 @@ async function fetchBotStatus(bot, registryPath, envPath) {
   }
 }
 
+function loadHeartbeatStatus(dbPath) {
+  try {
+    const db = createDatabase(dbPath);
+    initSchema(db);
+    const persistence = buildPersistence(db);
+    const latest = persistence.getLatestHeartbeatEvent ? persistence.getLatestHeartbeatEvent() : null;
+    db.close();
+    if (!latest || !latest.received_at) {
+      return {
+        lastHeartbeatAt: null,
+        heartbeatAgeMinutes: null,
+        heartbeatFresh: null,
+        heartbeatStale: null,
+        heartbeatStaleThresholdMinutes: 360,
+      };
+    }
+    const ageMinutes = Math.max(0, Math.floor((Date.now() - Date.parse(latest.received_at)) / 60000));
+    const stale = ageMinutes > 360;
+    return {
+      lastHeartbeatAt: latest.received_at,
+      heartbeatAgeMinutes: ageMinutes,
+      heartbeatFresh: !stale,
+      heartbeatStale: stale,
+      heartbeatStaleThresholdMinutes: 360,
+    };
+  } catch {
+    return {
+      lastHeartbeatAt: null,
+      heartbeatAgeMinutes: null,
+      heartbeatFresh: null,
+      heartbeatStale: null,
+      heartbeatStaleThresholdMinutes: 360,
+    };
+  }
+}
+
 async function buildMobileBotStatus(options = {}) {
-  const registryPath = options.registryPath || require('path').join(__dirname, '..', '..', 'config', 'bots.json');
+  const registryPath = options.registryPath || path.join(__dirname, '..', '..', 'config', 'bots.json');
   const envPath = options.envPath || '/home/ubuntu/.openclaw/.env';
+  const dbPath = options.dbPath || '/tmp/qs2_review/data/s2.sqlite';
   const registry = loadBotRegistry(registryPath);
 
   const bots = await Promise.all(registry.bots.map((bot) => fetchBotStatus(bot, registryPath, envPath)));
+  const heartbeat = loadHeartbeatStatus(dbPath);
 
   return {
     totals: {
@@ -100,6 +140,7 @@ async function buildMobileBotStatus(options = {}) {
       inTrade: bots.filter((bot) => bot.tradeState === 'Long' || bot.tradeState === 'Short').length,
     },
     bots,
+    heartbeat,
     generatedAt: new Date().toISOString(),
   };
 }

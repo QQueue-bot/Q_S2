@@ -348,6 +348,7 @@ function renderPositionPanel(positionState = {}) {
 function renderMobileBotStatusHtml(status = {}) {
   const totals = status.totals || {};
   const bots = Array.isArray(status.bots) ? status.bots : [];
+  const heartbeat = status.heartbeat || {};
 
   const botRows = bots.map(bot => {
     const enabled = bot.enabled ? 'Enabled' : 'Disabled';
@@ -394,6 +395,10 @@ function renderMobileBotStatusHtml(status = {}) {
     .bot-balance { font-size: 22px; font-weight: 800; margin-top: 8px; }
     .generated { font-size: 12px; opacity: 0.6; text-align: center; margin-top: 12px; }
     .freshness { font-size: 12px; text-align: center; margin-top: 6px; color: #93c5fd; }
+    .heartbeat { background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+    .heartbeat .label { font-size: 12px; opacity: 0.8; }
+    .heartbeat .value { font-size: 15px; font-weight: 700; margin-top: 3px; }
+    .heartbeat .sub { font-size: 12px; margin-top: 4px; color: #93c5fd; }
   </style>
 </head>
 <body>
@@ -403,9 +408,14 @@ function renderMobileBotStatusHtml(status = {}) {
       <div class="summary-card"><div class="label">Enabled</div><div class="value">${totals.enabled || 0}</div></div>
       <div class="summary-card"><div class="label">In Trade</div><div class="value">${totals.inTrade || 0}</div></div>
     </div>
+    <div class="heartbeat">
+      <div class="label">Last heartbeat</div>
+      <div class="value">${heartbeat.lastHeartbeatAt || 'n/a'} UTC</div>
+      <div class="sub">${heartbeat.heartbeatAgeMinutes === null ? 'Age unknown' : `${heartbeat.heartbeatAgeMinutes} min ago`} · ${heartbeat.heartbeatFresh === null ? 'status unknown' : (heartbeat.heartbeatStale ? 'stale' : 'fresh')}</div>
+    </div>
     <div class="bot-list">${botRows || '<div class="bot-card">No bots found.</div>'}</div>
-    <div class="generated">Updated ${status.generatedAt || 'n/a'}</div>
-    <div class="freshness">Auto-refresh every 15s</div>
+    <div class="generated">Updated ${status.generatedAt || 'n/a'} UTC</div>
+    <div class="freshness">Auto-refresh every 15s · heartbeat stale after ${heartbeat.heartbeatStaleThresholdMinutes || 360} min</div>
   </div>
 </body>
 </html>`;
