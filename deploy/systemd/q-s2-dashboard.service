@@ -1,0 +1,18 @@
+[Unit]
+Description=Q S2 Dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/tmp/qs2_review
+Environment=DASHBOARD_HOST=0.0.0.0
+Environment=DASHBOARD_PORT=3010
+Environment=S2_RUNTIME_PATH=/tmp/qs2_review
+Environment=S2_DB_PATH=/tmp/qs2_review/data/s2.sqlite
+ExecStart=/usr/bin/env node /tmp/qs2_review/scripts/run-dashboard.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -2,7 +2,7 @@
 const { createDashboardServer } = require('../src/dashboard/createDashboardServer');
 
 const server = createDashboardServer({
-  host: process.env.DASHBOARD_HOST || '127.0.0.1',
+  host: process.env.DASHBOARD_HOST || '0.0.0.0',
   port: Number(process.env.DASHBOARD_PORT || 3010),
   title: 'S2 Dashboard',
   runtime: {
