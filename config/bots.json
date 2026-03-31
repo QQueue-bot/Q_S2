@@ -3,7 +3,7 @@
     {
       "botId": "Bot1",
       "enabled": true,
-      "symbol": "BTCUSDT",
+      "symbol": "IPUSDT",
       "settingsRef": "./settings.json",
       "credentialRef": {
         "apiKeyEnv": "S2_BOT1_API_KEY",
@@ -16,7 +16,7 @@
     {
       "botId": "Bot2",
       "enabled": false,
-      "symbol": "BTCUSDT",
+      "symbol": "NEARUSDT",
       "settingsRef": "./settings.json",
       "credentialRef": {
         "apiKeyEnv": "S2_BOT2_API_KEY",
@@ -29,7 +29,7 @@
     {
       "botId": "Bot3",
       "enabled": false,
-      "symbol": "BTCUSDT",
+      "symbol": "PAXGUSDT",
       "settingsRef": "./settings.json",
       "credentialRef": {
         "apiKeyEnv": "S2_BOT3_API_KEY",
@@ -42,7 +42,7 @@
     {
       "botId": "Bot4",
       "enabled": false,
-      "symbol": "BTCUSDT",
+      "symbol": "CRVUSDT",
       "settingsRef": "./settings.json",
       "credentialRef": {
         "apiKeyEnv": "S2_BOT4_API_KEY",
@@ -55,7 +55,7 @@
     {
       "botId": "Bot5",
       "enabled": false,
-      "symbol": "BTCUSDT",
+      "symbol": "WIFUSDT",
       "settingsRef": "./settings.json",
       "credentialRef": {
         "apiKeyEnv": "S2_BOT5_API_KEY",
@@ -68,7 +68,7 @@
     {
       "botId": "Bot6",
       "enabled": false,
-      "symbol": "BTCUSDT",
+      "symbol": "IPUSDT",
       "settingsRef": "./settings.json",
       "credentialRef": {
         "apiKeyEnv": "S2_BOT6_API_KEY",
@@ -81,7 +81,7 @@
     {
       "botId": "Bot7",
       "enabled": false,
-      "symbol": "BTCUSDT",
+      "symbol": "FLOKIUSDT",
       "settingsRef": "./settings.json",
       "credentialRef": {
         "apiKeyEnv": "S2_BOT7_API_KEY",
@@ -94,7 +94,7 @@
     {
       "botId": "Bot8",
       "enabled": false,
-      "symbol": "BTCUSDT",
+      "symbol": "PUMPFUNUSDT",
       "settingsRef": "./settings.json",
       "credentialRef": {
         "apiKeyEnv": "S2_BOT8_API_KEY",
