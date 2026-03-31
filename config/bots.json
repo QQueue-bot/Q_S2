@@ -15,7 +15,7 @@
     },
     {
       "botId": "Bot2",
-      "enabled": false,
+      "enabled": true,
       "symbol": "NEARUSDT",
       "settingsRef": "./settings.json",
       "credentialRef": {
@@ -41,7 +41,7 @@
     },
     {
       "botId": "Bot4",
-      "enabled": false,
+      "enabled": true,
       "symbol": "CRVUSDT",
       "settingsRef": "./settings.json",
       "credentialRef": {
