@@ -45,6 +45,15 @@ function createWebhookServer(options = {}) {
 
     const providedSecret = requestUrl.searchParams.get('secret');
     if (!secret || providedSecret !== secret) {
+      persistence.recordWebhookEvent({
+        received_at: new Date().toISOString(),
+        request_path: requestUrl.pathname,
+        method: req.method,
+        auth_ok: 0,
+        parse_ok: 0,
+        raw_body: null,
+        error_message: 'Unauthorized',
+      });
       logger.warn('Webhook auth failure', { path: requestUrl.pathname, providedSecret: providedSecret ? '[redacted]' : null });
       return json(res, 401, { ok: false, error: 'Unauthorized' });
     }
@@ -63,6 +72,15 @@ function createWebhookServer(options = {}) {
             signalInput = parsedBody.signal;
           }
         } catch (error) {
+          persistence.recordWebhookEvent({
+            received_at: new Date().toISOString(),
+            request_path: requestUrl.pathname,
+            method: req.method,
+            auth_ok: 1,
+            parse_ok: 0,
+            raw_body: rawBody,
+            error_message: 'Invalid JSON body',
+          });
           logger.warn('Webhook JSON parse failure', { error: error.message, rawBody });
           return json(res, 400, { ok: false, error: 'Invalid JSON body' });
         }
@@ -73,6 +91,15 @@ function createWebhookServer(options = {}) {
 
         if (isHeartbeatSignal(signalInput)) {
           const heartbeatAt = new Date().toISOString();
+          persistence.recordWebhookEvent({
+            received_at: heartbeatAt,
+            request_path: requestUrl.pathname,
+            method: req.method,
+            auth_ok: 1,
+            parse_ok: 1,
+            raw_body: signalInput,
+            error_message: null,
+          });
           persistence.recordHeartbeatEvent({
             received_at: heartbeatAt,
             source: 'tradingview',
@@ -91,6 +118,21 @@ function createWebhookServer(options = {}) {
 
         const bootContext = resolveBotContext('Bot1');
         const parsedSignal = parseSignalString(signalInput, { allowedBots: bootContext.allowedBots });
+        persistence.recordWebhookEvent({
+          received_at: parsedSignal.receivedAt,
+          request_path: requestUrl.pathname,
+          method: req.method,
+          auth_ok: 1,
+          parse_ok: 1,
+          raw_body: signalInput,
+          error_message: null,
+        });
+        persistence.recordNormalizedSignal({
+          received_at: parsedSignal.receivedAt,
+          signal: parsedSignal.signal,
+          bot_id: parsedSignal.botId,
+          raw_input: parsedSignal.raw,
+        });
         const botContext = resolveBotContext(parsedSignal.botId);
         logger.info('Webhook parsed signal', { parsedSignal, botContext: { botId: botContext.botId, symbol: botContext.symbol, settingsPath: botContext.settingsPath } });
 
@@ -125,6 +167,15 @@ function createWebhookServer(options = {}) {
           tradingEnabled: settings.trading.enabled,
         });
       } catch (error) {
+        persistence.recordWebhookEvent({
+          received_at: new Date().toISOString(),
+          request_path: requestUrl.pathname,
+          method: req.method,
+          auth_ok: 1,
+          parse_ok: 0,
+          raw_body: signalInput,
+          error_message: error.message,
+        });
         logger.warn('Webhook processing failure', { error: error.message, rawBody: signalInput });
         return json(res, 400, { ok: false, error: error.message });
       }
