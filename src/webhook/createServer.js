@@ -136,7 +136,7 @@ function createWebhookServer(options = {}) {
         const botContext = resolveBotContext(parsedSignal.botId);
         logger.info('Webhook parsed signal', { parsedSignal, botContext: { botId: botContext.botId, symbol: botContext.symbol, settingsPath: botContext.settingsPath } });
 
-        const riskEngine = createRiskEngine({ settingsPath: botContext.settingsPath, botContext });
+        const riskEngine = createRiskEngine({ settingsPath: botContext.settingsPath, botContext, settings: botContext.settings });
         const risk = riskEngine.evaluate(parsedSignal);
         logger.info('Risk evaluation result', { risk });
 
@@ -160,11 +160,11 @@ function createWebhookServer(options = {}) {
 
         return json(res, 200, {
           ok: true,
-          validation,
+          validation: risk.configValidation,
           parsedSignal,
           risk,
           executionQueued: Boolean(risk.allowed && risk.actionable),
-          tradingEnabled: settings.trading.enabled,
+          tradingEnabled: Boolean(botContext.settings?.trading?.enabled),
         });
       } catch (error) {
         persistence.recordWebhookEvent({

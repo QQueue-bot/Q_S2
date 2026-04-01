@@ -1,5 +1,5 @@
 const path = require('path');
-const { loadAndValidateSettings } = require('../config/validateSettings');
+const { loadAndValidateSettings, validateSettingsObject } = require('../config/validateSettings');
 const { resolveBotContext } = require('../config/resolveBotContext');
 const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite');
 
@@ -22,7 +22,9 @@ function hasActivePlaceholderValues(settings) {
 function createRiskEngine(options = {}) {
   const botContext = options.botContext || resolveBotContext('Bot1');
   const settingsPath = options.settingsPath || botContext.settingsPath || path.join(__dirname, '..', '..', 'config', 'settings.json');
-  const { settings, validation } = loadAndValidateSettings(settingsPath);
+  const loaded = loadAndValidateSettings(settingsPath);
+  const settings = options.settings || botContext.settings || loaded.settings;
+  const validation = options.validation || botContext.validation || validateSettingsObject(settings);
   const dbPath = path.resolve(path.dirname(settingsPath), '..', settings.storage.databasePath.replace(/^\.\//, ''));
   const db = createDatabase(dbPath);
   initSchema(db);
@@ -32,8 +34,8 @@ function createRiskEngine(options = {}) {
     const reasons = [];
     const warnings = [];
 
-    if (!settings.trading.allowedSymbols.includes(settings.trading.defaultSymbol)) {
-      reasons.push('Configured symbol is not in allowedSymbols');
+    if (!settings.trading.allowedSymbols.includes(botContext.symbol)) {
+      reasons.push(`Bot symbol ${botContext.symbol} is not in allowedSymbols`);
     }
 
     if (!botContext.allowedBots.includes(parsedSignal.botId)) {
