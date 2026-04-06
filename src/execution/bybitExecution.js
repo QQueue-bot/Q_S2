@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 const axios = require('axios');
 const { loadAndValidateSettings } = require('../config/validateSettings');
 const { resolveBotContext } = require('../config/resolveBotContext');
+const { resolveBotSettings } = require('../config/resolveBotSettings');
 const { resolveDcaStrategy } = require('../config/resolveDcaStrategy');
 const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite');
 
@@ -611,8 +612,12 @@ async function executePaperTrade(parsedSignal, options = {}) {
 
 async function manageBreakEven(options = {}) {
   const envPath = options.envPath || '/home/ubuntu/.openclaw/.env';
-  const botContext = options.botContext || resolveBotContext(options.botId || 'Bot1', { envPath });
-  const settingsPath = options.settingsPath || botContext.settingsPath || path.join(__dirname, '..', '..', 'config', 'settings.json');
+  const botId = options.botId || 'Bot1';
+  const botContext = options.botContext || resolveBotContext(botId, { envPath });
+  const botSettingsContext = options.botSettingsContext || resolveBotSettings(botId, {
+    registryPath: options.registryPath,
+  });
+  const settingsPath = botSettingsContext.settingsPath || options.settingsPath || botContext.settingsPath || path.join(__dirname, '..', '..', 'config', 'settings.json');
   loadProjectEnv(envPath);
 
   const apiKey = botContext.credentials.apiKey;
@@ -621,7 +626,7 @@ async function manageBreakEven(options = {}) {
     throw new Error(`Missing resolved live credentials for ${botContext.botId}`);
   }
 
-  const { settings } = loadAndValidateSettings(settingsPath);
+  const settings = botSettingsContext.settings;
   const { dbPath, persistence } = resolvePersistence(options, settingsPath, settings);
   const symbol = botContext.symbol;
   const bybitBaseUrl = options.bybitBaseUrl || 'https://api.bybit.com';
@@ -685,8 +690,12 @@ async function manageBreakEven(options = {}) {
 
 async function manageTpSl(options = {}) {
   const envPath = options.envPath || '/home/ubuntu/.openclaw/.env';
-  const botContext = options.botContext || resolveBotContext(options.botId || 'Bot1', { envPath });
-  const settingsPath = options.settingsPath || botContext.settingsPath || path.join(__dirname, '..', '..', 'config', 'settings.json');
+  const botId = options.botId || 'Bot1';
+  const botContext = options.botContext || resolveBotContext(botId, { envPath });
+  const botSettingsContext = options.botSettingsContext || resolveBotSettings(botId, {
+    registryPath: options.registryPath,
+  });
+  const settingsPath = botSettingsContext.settingsPath || options.settingsPath || botContext.settingsPath || path.join(__dirname, '..', '..', 'config', 'settings.json');
   loadProjectEnv(envPath);
 
   const apiKey = botContext.credentials.apiKey;
@@ -695,7 +704,7 @@ async function manageTpSl(options = {}) {
     throw new Error(`Missing resolved live credentials for ${botContext.botId}`);
   }
 
-  const { settings } = loadAndValidateSettings(settingsPath);
+  const settings = botSettingsContext.settings;
   const { dbPath, persistence } = resolvePersistence(options, settingsPath, settings);
   const symbol = botContext.symbol;
   const bybitBaseUrl = options.bybitBaseUrl || 'https://api.bybit.com';
