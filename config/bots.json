@@ -24,7 +24,7 @@
       },
       "mdxSourceRef": "../mdx/Bot2.source.json",
       "mdxProfile": "balanced",
-      "notes": "Prepared for later activation; disabled by default"
+      "notes": "Active validation bot with MDX-derived runtime settings"
     },
     {
       "botId": "Bot3",
@@ -50,7 +50,7 @@
       },
       "mdxSourceRef": "../mdx/Bot4.source.json",
       "mdxProfile": "balanced",
-      "notes": "Prepared for later activation; disabled by default"
+      "notes": "Active validation bot with live staged-entry submission proof"
     },
     {
       "botId": "Bot5",

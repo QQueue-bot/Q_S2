@@ -5,10 +5,12 @@
     "marketType": "usdt_perpetual"
   },
   "trading": {
-    "enabled": false,
-    "defaultSymbol": "BTCUSDT",
+    "enabled": true,
+    "defaultSymbol": "IPUSDT",
     "allowedSymbols": [
-      "BTCUSDT"
+      "IPUSDT",
+      "NEARUSDT",
+      "CRVUSDT"
     ],
     "supportedSignals": [
       "ENTER_LONG",
@@ -16,7 +18,7 @@
       "ENTER_SHORT",
       "EXIT_SHORT"
     ],
-    "notes": "Trading remains disabled until valid runtime values are defined and enforcement logic exists."
+    "notes": "Current active validation set is Bot1/IPUSDT, Bot2/NEARUSDT, and Bot4/CRVUSDT."
   },
   "positionSizing": {
     "mode": "account_percent",
@@ -26,7 +28,7 @@
   },
   "riskControls": {
     "maxAccountPercent": 50,
-    "maxLeverage": 4,
+    "maxLeverage": 10,
     "allowExitSignalsAsSafety": true,
     "killSwitch": false,
     "duplicateSignalWindowSeconds": 0,
