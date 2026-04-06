@@ -88,6 +88,68 @@ async function fetchBotStatus(bot, registryPath, envPath) {
   }
 }
 
+function minutesAgo(isoString) {
+  if (!isoString) return null;
+  return Math.max(0, Math.floor((Date.now() - Date.parse(isoString)) / 60000));
+}
+
+function summarizeFailureReason(responseJson) {
+  try {
+    const parsed = JSON.parse(responseJson || '{}');
+    return parsed.retMsg || parsed.error || 'failed';
+  } catch {
+    return 'failed';
+  }
+}
+
+function loadLatestTradeActivity(dbPath) {
+  try {
+    const db = createDatabase(dbPath);
+    initSchema(db);
+    const latestSignal = db.prepare(`
+      SELECT received_at, bot_id, signal, raw_input
+      FROM normalized_signals
+      ORDER BY id DESC
+      LIMIT 1
+    `).get() || null;
+    const latestOrder = db.prepare(`
+      SELECT created_at, bot_id, symbol, signal, status, side, qty, notional_usd, response_json
+      FROM order_attempts
+      ORDER BY id DESC
+      LIMIT 1
+    `).get() || null;
+    const latestFailure = db.prepare(`
+      SELECT created_at, bot_id, symbol, signal, status, response_json
+      FROM order_attempts
+      WHERE status = 'failed'
+      ORDER BY id DESC
+      LIMIT 1
+    `).get() || null;
+    db.close();
+    return {
+      latestSignal: latestSignal ? {
+        ...latestSignal,
+        ageMinutes: minutesAgo(latestSignal.received_at),
+      } : null,
+      latestOrder: latestOrder ? {
+        ...latestOrder,
+        ageMinutes: minutesAgo(latestOrder.created_at),
+      } : null,
+      latestFailure: latestFailure ? {
+        ...latestFailure,
+        ageMinutes: minutesAgo(latestFailure.created_at),
+        reason: summarizeFailureReason(latestFailure.response_json),
+      } : null,
+    };
+  } catch {
+    return {
+      latestSignal: null,
+      latestOrder: null,
+      latestFailure: null,
+    };
+  }
+}
+
 function loadHeartbeatStatus(dbPath) {
   try {
     const db = createDatabase(dbPath);
@@ -132,6 +194,7 @@ async function buildMobileBotStatus(options = {}) {
 
   const bots = await Promise.all(registry.bots.map((bot) => fetchBotStatus(bot, registryPath, envPath)));
   const heartbeat = loadHeartbeatStatus(dbPath);
+  const activity = loadLatestTradeActivity(dbPath);
 
   return {
     totals: {
@@ -141,6 +204,7 @@ async function buildMobileBotStatus(options = {}) {
     },
     bots,
     heartbeat,
+    activity,
     generatedAt: new Date().toISOString(),
   };
 }

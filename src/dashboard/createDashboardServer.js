@@ -349,6 +349,7 @@ function renderMobileBotStatusHtml(status = {}) {
   const totals = status.totals || {};
   const bots = Array.isArray(status.bots) ? status.bots : [];
   const heartbeat = status.heartbeat || {};
+  const activity = status.activity || {};
 
   const botRows = bots.map(bot => {
     const enabled = bot.enabled ? 'Enabled' : 'Disabled';
@@ -399,6 +400,10 @@ function renderMobileBotStatusHtml(status = {}) {
     .heartbeat .label { font-size: 12px; opacity: 0.8; }
     .heartbeat .value { font-size: 15px; font-weight: 700; margin-top: 3px; }
     .heartbeat .sub { font-size: 12px; margin-top: 4px; color: #93c5fd; }
+    .activity { background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 12px; margin-bottom: 12px; display: grid; gap: 10px; }
+    .activity-row .label { font-size: 12px; opacity: 0.8; }
+    .activity-row .value { font-size: 14px; font-weight: 700; margin-top: 3px; }
+    .activity-row .sub { font-size: 12px; margin-top: 4px; color: #93c5fd; }
   </style>
 </head>
 <body>
@@ -412,6 +417,23 @@ function renderMobileBotStatusHtml(status = {}) {
       <div class="label">Last heartbeat</div>
       <div class="value">${heartbeat.lastHeartbeatAt || 'n/a'} UTC</div>
       <div class="sub">${heartbeat.heartbeatAgeMinutes === null ? 'Age unknown' : `${heartbeat.heartbeatAgeMinutes} min ago`} · ${heartbeat.heartbeatFresh === null ? 'status unknown' : (heartbeat.heartbeatStale ? 'stale' : 'fresh')}</div>
+    </div>
+    <div class="activity">
+      <div class="activity-row">
+        <div class="label">Last trade signal</div>
+        <div class="value">${activity.latestSignal ? `${activity.latestSignal.bot_id} ${activity.latestSignal.signal}` : 'n/a'}</div>
+        <div class="sub">${activity.latestSignal ? `${activity.latestSignal.ageMinutes} min ago · ${activity.latestSignal.received_at} UTC` : 'No signal recorded'}</div>
+      </div>
+      <div class="activity-row">
+        <div class="label">Last order attempt</div>
+        <div class="value">${activity.latestOrder ? `${activity.latestOrder.bot_id} ${activity.latestOrder.symbol} ${activity.latestOrder.status}` : 'n/a'}</div>
+        <div class="sub">${activity.latestOrder ? `${activity.latestOrder.ageMinutes} min ago · ${activity.latestOrder.created_at} UTC` : 'No order attempt recorded'}</div>
+      </div>
+      <div class="activity-row">
+        <div class="label">Last failure</div>
+        <div class="value">${activity.latestFailure ? `${activity.latestFailure.bot_id} ${activity.latestFailure.symbol}` : 'n/a'}</div>
+        <div class="sub">${activity.latestFailure ? `${activity.latestFailure.reason} · ${activity.latestFailure.ageMinutes} min ago` : 'No recent failed order attempt'}</div>
+      </div>
     </div>
     <div class="bot-list">${botRows || '<div class="bot-card">No bots found.</div>'}</div>
     <div class="generated">Updated ${status.generatedAt || 'n/a'} UTC</div>
