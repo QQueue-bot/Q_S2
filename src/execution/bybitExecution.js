@@ -72,6 +72,20 @@ async function getInstrumentInfo(symbol, options = {}) {
   return instrument;
 }
 
+async function getLiveReferencePrice(symbol, options = {}) {
+  const baseUrl = getBybitBaseUrl(options);
+  const response = await axios.get(`${baseUrl}/v5/market/tickers?category=linear&symbol=${symbol}`);
+  const ticker = response.data?.result?.list?.[0];
+  const price = Number(ticker?.lastPrice || 0);
+  if (!price) {
+    throw new Error(`Live reference price not found for ${symbol}`);
+  }
+  return {
+    last_price: price,
+    source: 'bybit_ticker',
+  };
+}
+
 function signRequest({ apiKey, apiSecret, timestamp, recvWindow, query = '', body = '' }) {
   const payloadToSign = timestamp + apiKey + recvWindow + (query || body);
   return crypto.createHmac('sha256', apiSecret).update(payloadToSign).digest('hex');
@@ -422,9 +436,11 @@ async function executePaperTrade(parsedSignal, options = {}) {
     }
   }
 
-  const latestTick = persistence.getPriceTicks().slice(-1)[0];
+  let latestTick = persistence.getPriceTicks().filter(tick => tick.symbol === symbol).slice(-1)[0] || null;
+  let sizingPriceSource = 'stored_tick';
   if (!latestTick) {
-    throw new Error('No stored price tick available for sizing');
+    latestTick = await getLiveReferencePrice(symbol, { bybitBaseUrl });
+    sizingPriceSource = latestTick.source || 'bybit_ticker';
   }
 
   const instrument = await getInstrumentInfo(symbol, { bybitBaseUrl });
@@ -560,6 +576,7 @@ async function executePaperTrade(parsedSignal, options = {}) {
     symbol,
     side,
     sizing,
+    sizingPriceSource,
     instrumentLotSize: lot,
     reversal,
     stagedEntry: {
