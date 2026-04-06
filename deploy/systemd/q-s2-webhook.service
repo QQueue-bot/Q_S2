@@ -11,6 +11,7 @@ ExecStart=/tmp/qs2_review/scripts/run-webhook-with-env.sh
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
+Environment=S2_DB_PATH=/tmp/qs2_review/data/s2.sqlite
 
 [Install]
 WantedBy=multi-user.target
