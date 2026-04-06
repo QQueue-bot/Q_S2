@@ -40,8 +40,8 @@ function floorToStep(value, step) {
   return Number(floored.toFixed(precision));
 }
 
-function computeOrderSizing({ maxMarginUsd, accountPercent, leverage, referencePrice, qtyStep, minOrderQty, maxMktOrderQty, minNotionalValue }) {
-  const marginUsd = maxMarginUsd * (accountPercent / 100);
+function computeOrderSizing({ effectiveAccountBalanceUsd, accountPercent, leverage, referencePrice, qtyStep, minOrderQty, maxMktOrderQty, minNotionalValue }) {
+  const marginUsd = effectiveAccountBalanceUsd * (accountPercent / 100);
   const notionalUsd = marginUsd * leverage;
   let qty = notionalUsd / referencePrice;
   qty = floorToStep(qty, qtyStep);
@@ -147,6 +147,17 @@ async function getLivePosition(symbol, credentials, options = {}) {
   const response = await bybitPrivateGet('/v5/position/list', `category=linear&symbol=${symbol}`, credentials, options);
   const positions = response?.result?.list || [];
   return positions.find(position => Number(position.size || 0) > 0) || null;
+}
+
+async function getAvailableAccountBalance(credentials, options = {}) {
+  const response = await bybitPrivateGet('/v5/account/wallet-balance', 'accountType=UNIFIED', credentials, options);
+  const coins = response?.result?.list?.[0]?.coin || [];
+  const usdt = coins.find(coin => coin.coin === 'USDT');
+  const walletBalance = Number(usdt?.walletBalance || 0);
+  if (!walletBalance) {
+    throw new Error('Unable to resolve live USDT wallet balance for sizing');
+  }
+  return walletBalance;
 }
 
 function isOppositePosition(signal, positionSide) {
@@ -445,8 +456,10 @@ async function executePaperTrade(parsedSignal, options = {}) {
 
   const instrument = await getInstrumentInfo(symbol, { bybitBaseUrl });
   const lot = instrument.lotSizeFilter;
+  const actualAccountBalanceUsd = await getAvailableAccountBalance(credentials, { bybitBaseUrl });
+  const effectiveAccountBalanceUsd = Math.min(actualAccountBalanceUsd, 5000);
   const sizing = computeOrderSizing({
-    maxMarginUsd: 5000,
+    effectiveAccountBalanceUsd,
     accountPercent: settings.positionSizing.accountPercent,
     leverage: settings.positionSizing.leverage,
     referencePrice: latestTick.last_price,
@@ -577,6 +590,8 @@ async function executePaperTrade(parsedSignal, options = {}) {
     side,
     sizing,
     sizingPriceSource,
+    actualAccountBalanceUsd,
+    effectiveAccountBalanceUsd,
     instrumentLotSize: lot,
     reversal,
     stagedEntry: {
