@@ -96,14 +96,14 @@
 
 ## 7. CURRENT PROPOSED RISK TABLE (TRACKING ONLY)
 current_proposed_risk_settings
-- Bot1 | STX | 70% / 4x | 60% / 3x | ⬇️
-- Bot2 | NEAR | 60% / 4x | 50% / 3x | ⬇️
-- Bot3 | PAXG | 60% / 7x | 0–20% / 1–2x | ⛔⬇️
-- Bot4 | CRV | 70% / 6x | 40% / 3x | ⬇️⬇️
-- Bot5 | WIF | 70% / 5x | 50% / 3x | ⬇️
-- Bot6 | IP | 70% / 3x | 50% / 2x | ⬇️
-- Bot7 | FLOKI | 70% / 6x | 50% / 4x | ⬇️
-- Bot8 | PUMP | 70% / 5x | 60% / 4x | ⬇️
+- Bot1 | IPUSDT | 70% / 4x | 60% / 3x | ⬇️
+- Bot2 | NEARUSDT | 60% / 4x | 50% / 3x | ⬇️
+- Bot3 | PAXGUSDT | 60% / 7x | 0–20% / 1–2x | ⛔⬇️
+- Bot4 | CRVUSDT | 70% / 6x | 40% / 3x | ⬇️⬇️
+- Bot5 | WIFUSDT | 70% / 5x | 50% / 3x | ⬇️
+- Bot6 | IPUSDT | 70% / 3x | 50% / 2x | ⬇️
+- Bot7 | FLOKIUSDT | 70% / 6x | 50% / 4x | ⬇️
+- Bot8 | PUMPFUNUSDT | 70% / 5x | 60% / 4x | ⬇️
 
 ## 8. DCA STATUS (FACTS)
 - Bot1 / IPUSDT: dca_status=not confirmed from current aligned DB, recent_dca_executions=0
