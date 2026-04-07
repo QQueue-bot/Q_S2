@@ -11,6 +11,9 @@
       },
       "mdxSourceRef": "../mdx/Bot1.source.json",
       "mdxProfile": "balanced",
+      "dcaPolicy": {
+        "enabled": false
+      },
       "notes": "Primary verified live-routed bot for Milestone C; operator mapping corrected so Bot1 is STX and MDX-derived settings remain the runtime source of truth"
     },
     {
@@ -24,6 +27,9 @@
       },
       "mdxSourceRef": "../mdx/Bot2.source.json",
       "mdxProfile": "balanced",
+      "dcaPolicy": {
+        "enabled": true
+      },
       "notes": "Active validation bot with MDX-derived runtime settings"
     },
     {
@@ -37,6 +43,9 @@
       },
       "mdxSourceRef": "../mdx/Bot3.source.json",
       "mdxProfile": "balanced",
+      "dcaPolicy": {
+        "enabled": false
+      },
       "notes": "Prepared for later activation; disabled by default"
     },
     {
@@ -50,6 +59,9 @@
       },
       "mdxSourceRef": "../mdx/Bot4.source.json",
       "mdxProfile": "balanced",
+      "dcaPolicy": {
+        "enabled": false
+      },
       "notes": "Active validation bot with live staged-entry submission proof"
     },
     {
@@ -63,6 +75,9 @@
       },
       "mdxSourceRef": "../mdx/Bot5.source.json",
       "mdxProfile": "balanced",
+      "dcaPolicy": {
+        "enabled": false
+      },
       "notes": "Prepared for later activation; disabled by default"
     },
     {
@@ -76,6 +91,9 @@
       },
       "mdxSourceRef": "../mdx/Bot6.source.json",
       "mdxProfile": "balanced",
+      "dcaPolicy": {
+        "enabled": false
+      },
       "notes": "Prepared for later activation; disabled by default"
     },
     {
@@ -89,6 +107,9 @@
       },
       "mdxSourceRef": "../mdx/Bot7.source.json",
       "mdxProfile": "balanced",
+      "dcaPolicy": {
+        "enabled": false
+      },
       "notes": "Prepared for later activation; disabled by default"
     },
     {
@@ -102,6 +123,9 @@
       },
       "mdxSourceRef": "../mdx/Bot8.source.json",
       "mdxProfile": "balanced",
+      "dcaPolicy": {
+        "enabled": false
+      },
       "notes": "Prepared for later activation; disabled by default"
     }
   ]

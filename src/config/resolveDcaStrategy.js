@@ -1,8 +1,12 @@
 function resolveDcaStrategy(options = {}) {
   const profile = options.profile || 'balanced';
+  const bot = options.bot || null;
+  const botDcaEnabled = typeof bot?.dcaPolicy?.enabled === 'boolean'
+    ? bot.dcaPolicy.enabled
+    : false;
 
   const strategy = {
-    enabled: true,
+    enabled: botDcaEnabled,
     mode: 'impulse_aware_confirmation',
     profile,
     entries: {
@@ -28,6 +32,11 @@ function resolveDcaStrategy(options = {}) {
     stopBehavior: {
       alterStopOnAdd: false,
       notes: 'DCA does not alter stop structure in Candidate A.',
+    },
+    policy: {
+      source: 'bot.dcaPolicy.enabled',
+      defaultOff: true,
+      botId: bot?.botId || null,
     },
   };
 
