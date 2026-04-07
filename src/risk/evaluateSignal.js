@@ -39,11 +39,15 @@ function createRiskEngine(options = {}) {
     }
 
     if (!botContext.allowedBots.includes(parsedSignal.botId)) {
-      reasons.push(`Bot is not allowed: ${parsedSignal.botId}`);
+      reasons.push(`Bot is not configured in registry: ${parsedSignal.botId}`);
     }
 
     if (parsedSignal.botId !== botContext.botId) {
       reasons.push(`Resolved bot context mismatch: expected ${botContext.botId}, got ${parsedSignal.botId}`);
+    }
+
+    if (!botContext.executionEnabledBots.includes(parsedSignal.botId)) {
+      reasons.push(`Execution is disabled for ${parsedSignal.botId}`);
     }
 
     if (settings.positionSizing.accountPercent > settings.riskControls.maxAccountPercent) {
