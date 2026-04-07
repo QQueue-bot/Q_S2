@@ -3,7 +3,7 @@
     {
       "botId": "Bot1",
       "enabled": true,
-      "symbol": "IPUSDT",
+      "symbol": "STXUSDT",
       "settingsRef": "./settings.json",
       "credentialRef": {
         "apiKeyEnv": "S2_BOT1_API_KEY",
@@ -11,8 +11,8 @@
       },
       "mdxSourceRef": "../mdx/Bot1.source.json",
       "mdxProfile": "balanced",
-      "notes": "Primary verified live-routed bot for Milestone C; MDX-derived settings are the primary runtime path"
-    },
+      "notes": "Primary verified live-routed bot for Milestone C; operator mapping corrected so Bot1 is STX and MDX-derived settings remain the runtime source of truth"
+    }
     {
       "botId": "Bot2",
       "enabled": true,

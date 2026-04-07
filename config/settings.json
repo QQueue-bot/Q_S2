@@ -6,9 +6,9 @@
   },
   "trading": {
     "enabled": true,
-    "defaultSymbol": "IPUSDT",
+    "defaultSymbol": "STXUSDT",
     "allowedSymbols": [
-      "IPUSDT",
+      "STXUSDT",
       "NEARUSDT",
       "CRVUSDT"
     ],
@@ -18,7 +18,7 @@
       "ENTER_SHORT",
       "EXIT_SHORT"
     ],
-    "notes": "Current active validation set is Bot1/IPUSDT, Bot2/NEARUSDT, and Bot4/CRVUSDT."
+    "notes": "Current active validation set is Bot1/STXUSDT, Bot2/NEARUSDT, and Bot4/CRVUSDT."
   },
   "positionSizing": {
     "mode": "account_percent",
