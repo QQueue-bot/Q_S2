@@ -358,6 +358,11 @@ function renderMobileBotStatusHtml(status = {}) {
       : 'Balance unavailable';
     const stateClass = bot.tradeState === 'Long' || bot.tradeState === 'Short' ? 'trade-live' : 'trade-flat';
     const enabledClass = bot.enabled ? 'bot-enabled' : 'bot-disabled';
+    const hasUpnl = Number.isFinite(bot.unrealizedPnl);
+    const upnl = hasUpnl
+      ? `${bot.unrealizedPnl >= 0 ? '+' : ''}${bot.unrealizedPnl.toFixed(2)} USDT uPnL`
+      : 'uPnL n/a';
+    const upnlClass = hasUpnl ? (bot.unrealizedPnl >= 0 ? 'upnl-positive' : 'upnl-negative') : 'upnl-neutral';
 
     return `<div class="bot-card ${enabledClass}">
       <div class="bot-top">
@@ -366,6 +371,7 @@ function renderMobileBotStatusHtml(status = {}) {
       </div>
       <div class="bot-meta">${enabled} · ${bot.symbol || 'n/a'}</div>
       <div class="bot-balance">${balance}</div>
+      <div class="bot-upnl ${upnlClass}">${upnl}</div>
     </div>`;
   }).join('\n');
 
@@ -394,6 +400,10 @@ function renderMobileBotStatusHtml(status = {}) {
     .trade-flat { background: #1e293b; color: #cbd5e1; }
     .bot-meta { font-size: 13px; opacity: 0.82; margin-top: 4px; }
     .bot-balance { font-size: 22px; font-weight: 800; margin-top: 8px; }
+    .bot-upnl { font-size: 14px; font-weight: 700; margin-top: 6px; }
+    .upnl-positive { color: #86efac; }
+    .upnl-negative { color: #fca5a5; }
+    .upnl-neutral { color: #94a3b8; }
     .generated { font-size: 12px; opacity: 0.6; text-align: center; margin-top: 12px; }
     .freshness { font-size: 12px; text-align: center; margin-top: 6px; color: #93c5fd; }
     .heartbeat { background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 12px; margin-bottom: 12px; }

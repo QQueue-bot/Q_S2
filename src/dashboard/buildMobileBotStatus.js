@@ -62,9 +62,11 @@ async function fetchBotStatus(bot, registryPath, envPath) {
     }
 
     let tradeState = 'Flat';
+    let unrealizedPnl = null;
     const pos = position?.result?.list?.[0];
     if (position?.retCode === 0 && pos && Number(pos.size || 0) > 0) {
       tradeState = pos.side === 'Buy' ? 'Long' : pos.side === 'Sell' ? 'Short' : 'In Trade';
+      unrealizedPnl = Number(pos.unrealisedPnl ?? pos.unrealizedPnl ?? 0);
     }
 
     return {
@@ -74,6 +76,7 @@ async function fetchBotStatus(bot, registryPath, envPath) {
       tradeState,
       balance,
       balanceStatus,
+      unrealizedPnl,
     };
   } catch (error) {
     return {
