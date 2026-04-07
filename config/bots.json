@@ -12,7 +12,7 @@
       "mdxSourceRef": "../mdx/Bot1.source.json",
       "mdxProfile": "balanced",
       "notes": "Primary verified live-routed bot for Milestone C; operator mapping corrected so Bot1 is STX and MDX-derived settings remain the runtime source of truth"
-    }
+    },
     {
       "botId": "Bot2",
       "enabled": true,
