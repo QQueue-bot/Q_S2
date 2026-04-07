@@ -54,6 +54,24 @@ This will:
 - smoke-test `/`, `/mobile`, and `/api/mobile-bot-status`
 - check both local and public dashboard routes
 
+## Lean post-change ops check (O1)
+
+For a low-token, low-overhead post-change verification pass, use:
+
+```bash
+bash /home/ubuntu/.openclaw/workspace/Q_S2/scripts/post-change-ops-check.sh
+```
+
+This check is intentionally lean. It verifies:
+
+- repo/runtime git sync
+- key runtime config files exist
+- webhook and dashboard services are active
+- runtime sqlite DB is readable
+- local webhook, dashboard, mobile page, and mobile API respond
+
+It is meant to be run after meaningful changes, not as a heavy recurring report.
+
 ## Enable on boot
 
 ```bash
