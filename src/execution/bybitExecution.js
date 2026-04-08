@@ -213,6 +213,26 @@ function computePnlPercent(positionSide, entryPrice, markPrice) {
   return null;
 }
 
+function getTradeId(livePosition, symbol) {
+  const createdTime = livePosition?.createdTime ? String(livePosition.createdTime) : 'unknown';
+  const side = livePosition?.side || 'unknown';
+  return `${symbol}:${side}:${createdTime}`;
+}
+
+function hasTradeActionExecuted(persistence, tradeId, actionKey) {
+  if (!persistence.findTradeStateEventByKey) {
+    return false;
+  }
+  return Boolean(persistence.findTradeStateEventByKey({ trade_id: tradeId, action_key: actionKey }));
+}
+
+function recordTradeAction(persistence, payload) {
+  if (!persistence.recordTradeStateEvent) {
+    return;
+  }
+  persistence.recordTradeStateEvent(payload);
+}
+
 function hasBreakEvenArmed(persistence, symbol, livePosition = null) {
   const events = persistence.getBreakEvenEvents ? persistence.getBreakEvenEvents() : [];
   const entryTimestampMs = livePosition?.createdTime ? Number(livePosition.createdTime) : null;
@@ -483,7 +503,7 @@ async function executePaperTrade(parsedSignal, options = {}) {
     minNotionalValue: Number(lot.minNotionalValue),
   });
 
-  const dcaStrategy = resolveDcaStrategy({ profile: botContext.mdx?.profile || 'balanced' });
+  const dcaStrategy = resolveDcaStrategy({ profile: botContext.mdx?.profile || 'balanced', bot: botContext.bot });
   const triggerCandle = options.triggerCandle || null;
   const recentCandles = options.recentCandles || [];
   const { classifyTriggerCandle, shouldBlockDcaAdd } = require('./evaluateDcaEntry');
@@ -519,7 +539,30 @@ async function executePaperTrade(parsedSignal, options = {}) {
   });
 
   let delayedEntry = null;
-  if (firstEntry.ok) {
+  const tradeId = firstEntry.ok ? `${symbol}:${side}:${Date.now()}` : null;
+  if (firstEntry.ok && !dcaStrategy.enabled) {
+    persistence.recordDcaEvent({
+      created_at: new Date().toISOString(),
+      bot_id: parsedSignal.botId,
+      symbol,
+      event_type: 'dca_add_skipped',
+      candle_delay: delayCandles,
+      status: 'skipped',
+      details_json: JSON.stringify({
+        trade_id: tradeId,
+        dca_enabled: false,
+        dca_policy_version: 'selective-dca-default-off',
+        decision: 'skipped',
+        reason: 'policy_disabled',
+      }),
+    });
+    delayedEntry = {
+      ok: false,
+      skipped: true,
+      reasons: ['policy_disabled'],
+      qty: stageTwoQty,
+    };
+  } else if (firstEntry.ok) {
     persistence.recordDcaEvent({
       created_at: new Date().toISOString(),
       bot_id: parsedSignal.botId,
@@ -527,7 +570,14 @@ async function executePaperTrade(parsedSignal, options = {}) {
       event_type: 'dca_add_scheduled',
       candle_delay: delayCandles,
       status: 'scheduled',
-      details_json: JSON.stringify({ impulse, stageDelaySeconds, qty: stageTwoQty }),
+      details_json: JSON.stringify({
+        trade_id: tradeId,
+        impulse,
+        stageDelaySeconds,
+        qty: stageTwoQty,
+        dca_enabled: true,
+        dca_policy_version: 'selective-dca-default-off',
+      }),
     });
     await new Promise(resolve => setTimeout(resolve, stageDelaySeconds * 1000));
     const guardState = shouldBlockDcaAdd({
@@ -554,7 +604,14 @@ async function executePaperTrade(parsedSignal, options = {}) {
         event_type: 'dca_add_skipped',
         candle_delay: delayCandles,
         status: 'skipped',
-        details_json: JSON.stringify({ reasons: guardState.reasons, qty: stageTwoQty }),
+        details_json: JSON.stringify({
+          trade_id: tradeId,
+          dca_enabled: true,
+          dca_policy_version: 'selective-dca-default-off',
+          decision: 'skipped',
+          reasons: guardState.reasons,
+          qty: stageTwoQty,
+        }),
       });
       delayedEntry = {
         ok: false,
@@ -592,7 +649,15 @@ async function executePaperTrade(parsedSignal, options = {}) {
         event_type: 'dca_add_executed',
         candle_delay: delayCandles,
         status: secondEntry.ok ? 'executed' : 'failed',
-        details_json: JSON.stringify({ impulse, qty: stageTwoQty, response: secondEntry.response }),
+        details_json: JSON.stringify({
+          trade_id: tradeId,
+          dca_enabled: true,
+          dca_policy_version: 'selective-dca-default-off',
+          decision: secondEntry.ok ? 'executed' : 'failed',
+          impulse,
+          qty: stageTwoQty,
+          response: secondEntry.response,
+        }),
       });
       delayedEntry = secondEntry;
     }
@@ -654,7 +719,13 @@ async function manageBreakEven(options = {}) {
     return { ok: true, action: 'hold', dbPath, decision };
   }
 
+  const tradeId = getTradeId(livePosition, symbol);
+
   if (decision.type === 'arm_break_even') {
+    const actionKey = 'BE_ARM';
+    if (hasTradeActionExecuted(persistence, tradeId, actionKey)) {
+      return { ok: true, action: 'armed_skip_duplicate', dbPath, decision, tradeId };
+    }
     persistence.recordBreakEvenEvent({
       created_at: new Date().toISOString(),
       bot_id: botContext.botId,
@@ -664,9 +735,25 @@ async function manageBreakEven(options = {}) {
       side: livePosition.side,
       entry_price: Number(livePosition.avgPrice || 0),
       mark_price: Number(livePosition.markPrice || 0),
-      response_json: JSON.stringify({ action: 'armed' }),
+      response_json: JSON.stringify({ action: 'armed', trade_id: tradeId }),
     });
-    return { ok: true, action: 'armed', dbPath, decision };
+    recordTradeAction(persistence, {
+      created_at: new Date().toISOString(),
+      trade_id: tradeId,
+      bot_id: botContext.botId,
+      symbol,
+      action_type: 'break_even',
+      action_key: actionKey,
+      state: 'be_armed',
+      level_name: 'BE',
+      details_json: JSON.stringify({ trigger_percent: Number(decision.triggerPercent) }),
+    });
+    return { ok: true, action: 'armed', dbPath, decision, tradeId };
+  }
+
+  const closeActionKey = 'BE_CLOSE';
+  if (hasTradeActionExecuted(persistence, tradeId, closeActionKey)) {
+    return { ok: true, action: 'break_even_close_skip_duplicate', dbPath, decision, tradeId };
   }
 
   const closeResult = await executeCloseOrder({
@@ -689,7 +776,18 @@ async function manageBreakEven(options = {}) {
     side: livePosition.side,
     entry_price: Number(livePosition.avgPrice || 0),
     mark_price: Number(livePosition.markPrice || 0),
-    response_json: JSON.stringify(closeResult.response),
+    response_json: JSON.stringify({ ...closeResult.response, trade_id: tradeId }),
+  });
+  recordTradeAction(persistence, {
+    created_at: new Date().toISOString(),
+    trade_id: tradeId,
+    bot_id: botContext.botId,
+    symbol,
+    action_type: 'break_even',
+    action_key: closeActionKey,
+    state: 'closed',
+    level_name: 'BE',
+    details_json: JSON.stringify({ trigger_percent: Number(decision.triggerPercent) }),
   });
 
   return {
@@ -698,6 +796,7 @@ async function manageBreakEven(options = {}) {
     dbPath,
     decision,
     closeResult,
+    tradeId,
   };
 }
 
@@ -732,6 +831,30 @@ async function manageTpSl(options = {}) {
     return { ok: true, action: 'hold', dbPath, decision };
   }
 
+  const tradeId = getTradeId(livePosition, symbol);
+  const levelName = decision.type === 'take_profit' ? `TP_${decision.triggerPercent}_${decision.closePercent}` : 'STOP_LOSS';
+  const actionKey = `${decision.type}:${levelName}`;
+  if (hasTradeActionExecuted(persistence, tradeId, actionKey)) {
+    recordTradeAction(persistence, {
+      created_at: new Date().toISOString(),
+      trade_id: tradeId,
+      bot_id: botContext.botId,
+      symbol,
+      action_type: decision.type,
+      action_key: `${actionKey}:SKIP`,
+      state: 'skipped',
+      level_name: levelName,
+      details_json: JSON.stringify({ skip_reason: 'already_completed' }),
+    });
+    return {
+      ok: true,
+      action: `${decision.type}_skip_duplicate`,
+      dbPath,
+      decision,
+      tradeId,
+    };
+  }
+
   const closeResult = await executeCloseOrder({
     symbol,
     botId: botContext.botId,
@@ -744,12 +867,29 @@ async function manageTpSl(options = {}) {
     bybitBaseUrl,
   });
 
+  recordTradeAction(persistence, {
+    created_at: new Date().toISOString(),
+    trade_id: tradeId,
+    bot_id: botContext.botId,
+    symbol,
+    action_type: decision.type,
+    action_key: actionKey,
+    state: decision.type === 'take_profit' ? 'tp_done' : 'closed',
+    level_name: levelName,
+    details_json: JSON.stringify({
+      trigger_percent: decision.triggerPercent,
+      close_percent: decision.closePercent,
+      executed: closeResult.ok,
+    }),
+  });
+
   return {
     ok: closeResult.ok,
     action: decision.type,
     dbPath,
     decision,
     closeResult,
+    tradeId,
   };
 }
 

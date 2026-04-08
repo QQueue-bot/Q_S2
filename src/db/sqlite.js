@@ -123,6 +123,19 @@ function initSchema(db) {
       status TEXT NOT NULL,
       details_json TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS trade_state_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL,
+      trade_id TEXT NOT NULL,
+      bot_id TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      action_type TEXT NOT NULL,
+      action_key TEXT NOT NULL,
+      state TEXT NOT NULL,
+      level_name TEXT,
+      details_json TEXT
+    );
   `);
 
   const ensureColumn = (tableName, columnName, columnSql) => {
@@ -226,6 +239,27 @@ function buildPersistence(db) {
     )
   `);
 
+  const insertTradeStateEvent = db.prepare(`
+    INSERT INTO trade_state_events (
+      created_at, trade_id, bot_id, symbol, action_type, action_key, state, level_name, details_json
+    ) VALUES (
+      @created_at, @trade_id, @bot_id, @symbol, @action_type, @action_key, @state, @level_name, @details_json
+    )
+  `);
+
+  const findTradeStateEventByKeyStmt = db.prepare(`
+    SELECT * FROM trade_state_events
+    WHERE trade_id = @trade_id
+      AND action_key = @action_key
+    ORDER BY id DESC
+    LIMIT 1
+  `);
+
+  const getTradeStateEventsStmt = db.prepare(`
+    SELECT * FROM trade_state_events
+    ORDER BY id ASC
+  `);
+
   return {
     recordWebhookEvent(event) {
       return insertWebhookEvent.run(event);
@@ -266,6 +300,16 @@ function buildPersistence(db) {
         details_json: event.details_json || null,
       });
     },
+    recordTradeStateEvent(event) {
+      return insertTradeStateEvent.run({
+        ...event,
+        level_name: event.level_name || null,
+        details_json: event.details_json || null,
+      });
+    },
+    findTradeStateEventByKey(params) {
+      return findTradeStateEventByKeyStmt.get(params) || null;
+    },
     getWebhookEvents() {
       return db.prepare('SELECT * FROM raw_webhook_events ORDER BY id ASC').all();
     },
@@ -295,6 +339,9 @@ function buildPersistence(db) {
     },
     getHeartbeatEvents() {
       return db.prepare('SELECT * FROM heartbeat_events ORDER BY id ASC').all();
+    },
+    getTradeStateEvents() {
+      return getTradeStateEventsStmt.all();
     },
     getLatestHeartbeatEvent() {
       return db.prepare('SELECT * FROM heartbeat_events ORDER BY id DESC LIMIT 1').get() || null;
