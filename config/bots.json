@@ -26,11 +26,11 @@
         "apiSecretEnv": "S2_BOT2_API_SECRET"
       },
       "mdxSourceRef": "../mdx/Bot2.source.json",
-      "mdxProfile": "balanced",
+      "mdxProfile": "aggressive",
       "dcaPolicy": {
         "enabled": true
       },
-      "notes": "Active validation bot with MDX-derived runtime settings"
+      "notes": "Active validation bot with MDX-derived runtime settings; NEAR aligned to aggressive profile"
     },
     {
       "botId": "Bot3",
