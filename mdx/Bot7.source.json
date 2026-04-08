@@ -8,18 +8,18 @@
     "exchange": "Bitget",
     "timeframe": "175m",
     "signalSetting": 5,
-    "baseline": "TMA",
+    "baseline": "EMA",
     "baselineValue": 18,
     "slType": "ATR",
     "slValue": 3.5
   },
   "sourcePerformanceMeta": {
-    "performance30d": 35.56,
-    "performance90d": 70.1,
-    "performance180d": 118.03,
+    "performance30d": 13.04,
+    "performance90d": 59.24,
+    "performance180d": 108.73,
     "performance360d": null,
-    "winrate": 64.44,
-    "profitFactor": 2.36
+    "winrate": 54.35,
+    "profitFactor": null
   },
   "defaultProfile": "balanced",
   "profiles": {
@@ -32,11 +32,11 @@
         "leverage": 1
       },
       "performanceMeta": {
-        "tradeCount": 45,
-        "winrate": 64.44,
-        "netProfit": 118.03,
-        "maxDrawdown": -12.93,
-        "avgTradeProfit": 2.62
+        "tradeCount": 46,
+        "winrate": 65.22,
+        "netProfit": 108.73,
+        "maxDrawdown": -11.32,
+        "avgTradeProfit": 2.36
       }
     },
     "balanced": {
@@ -48,27 +48,27 @@
         "leverage": 3
       },
       "performanceMeta": {
-        "tradeCount": 45,
-        "winrate": 55.56,
-        "netProfit": 731.62,
-        "maxDrawdown": -29.14,
-        "avgTradeProfit": 16.26
+        "tradeCount": 46,
+        "winrate": 54.35,
+        "netProfit": 607.61,
+        "maxDrawdown": -27.14,
+        "avgTradeProfit": 13.21
       }
     },
     "aggressive": {
       "strategy": {
         "tpTargetsPercent": [4.04, 6.46, 8.41, 12.39, 19.04, 30.51],
-        "tpAllocationsPercent": [8, 28, 11, 19, 25, 11],
+        "tpAllocationsPercent": [8, 28, 11, 19, 23, 11],
         "stopLossPercent": 6,
         "slToBeTrigger": "TP1",
         "leverage": 5
       },
       "performanceMeta": {
-        "tradeCount": 45,
-        "winrate": 64.89,
-        "netProfit": 4675.66,
-        "maxDrawdown": -58.25,
-        "avgTradeProfit": 103.9
+        "tradeCount": 46,
+        "winrate": 69.57,
+        "netProfit": 3602.14,
+        "maxDrawdown": -49.81,
+        "avgTradeProfit": 78.31
       }
     }
   }

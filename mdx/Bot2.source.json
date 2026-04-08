@@ -4,7 +4,7 @@
     "asset": "NEAR"
   },
   "signalBotSourceMeta": {
-    "optimizedPeriod": "180 Days",
+    "optimizedPeriod": "2026-04-08 refresh",
     "exchange": "Bitget",
     "timeframe": "150m",
     "signalSetting": 4,
@@ -14,29 +14,29 @@
     "slValue": 3.5
   },
   "sourcePerformanceMeta": {
-    "performance30d": 26.93,
-    "performance90d": 45.78,
-    "performance180d": 119.97,
+    "performance30d": 18.31,
+    "performance90d": 46.76,
+    "performance180d": null,
     "performance360d": null,
-    "winrate": 81.25,
-    "profitFactor": 3.029
+    "winrate": 78.72,
+    "profitFactor": null
   },
   "defaultProfile": "balanced",
   "profiles": {
     "safe": {
       "strategy": {
-        "tpTargetsPercent": [2.89, 5.08, 5.88, 8.79, 14.96, 22.38],
+        "tpTargetsPercent": [2.99, 5.08, 5.88, 8.79, 14.96, 22.38],
         "tpAllocationsPercent": [26, 25, 15, 14, 11, 9],
         "stopLossPercent": 6,
         "slToBeTrigger": "TP1",
         "leverage": 1
       },
       "performanceMeta": {
-        "tradeCount": 48,
-        "winrate": 81.25,
-        "netProfit": 119.97,
+        "tradeCount": 47,
+        "winrate": 80.85,
+        "netProfit": 110.75,
         "maxDrawdown": -10.18,
-        "avgTradeProfit": 2.5
+        "avgTradeProfit": 2.36
       }
     },
     "balanced": {
@@ -48,11 +48,11 @@
         "leverage": 4
       },
       "performanceMeta": {
-        "tradeCount": 48,
-        "winrate": 79.17,
-        "netProfit": 2207.67,
+        "tradeCount": 47,
+        "winrate": 78.72,
+        "netProfit": 1914.36,
         "maxDrawdown": -37.48,
-        "avgTradeProfit": 45.99
+        "avgTradeProfit": 40.73
       }
     },
     "aggressive": {
@@ -64,11 +64,11 @@
         "leverage": 6
       },
       "performanceMeta": {
-        "tradeCount": 48,
-        "winrate": 72.92,
-        "netProfit": 5476.63,
+        "tradeCount": 47,
+        "winrate": 72.34,
+        "netProfit": 4667.83,
         "maxDrawdown": -52.96,
-        "avgTradeProfit": 114.1
+        "avgTradeProfit": 99.32
       }
     }
   }

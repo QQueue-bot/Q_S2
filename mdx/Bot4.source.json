@@ -4,7 +4,7 @@
     "asset": "CRV"
   },
   "signalBotSourceMeta": {
-    "optimizedPeriod": "90 Days",
+    "optimizedPeriod": "2026-04-08 refresh",
     "exchange": "Bybit",
     "timeframe": "160m",
     "signalSetting": 5,
@@ -14,29 +14,29 @@
     "slValue": 3
   },
   "sourcePerformanceMeta": {
-    "performance30d": 12.31,
-    "performance90d": 242.16,
+    "performance30d": -5.72,
+    "performance90d": 100.52,
     "performance180d": null,
     "performance360d": null,
-    "winrate": 69.57,
-    "profitFactor": 3.123
+    "winrate": 76.92,
+    "profitFactor": null
   },
   "defaultProfile": "balanced",
   "profiles": {
     "safe": {
       "strategy": {
-        "tpTargetsPercent": [2.08, 5.26, 7.54, 10.11, 12.71, 20.09],
+        "tpTargetsPercent": [2.08, 5.25, 7.54, 10.11, 12.71, 20.09],
         "tpAllocationsPercent": [26, 25, 15, 14, 11, 9],
         "stopLossPercent": 6,
         "slToBeTrigger": "TP2",
-        "leverage": 3
+        "leverage": 2
       },
       "performanceMeta": {
-        "tradeCount": 23,
-        "winrate": 69.57,
-        "netProfit": 242.16,
-        "maxDrawdown": -20.14,
-        "avgTradeProfit": 10.53
+        "tradeCount": 26,
+        "winrate": 65.38,
+        "netProfit": 100.52,
+        "maxDrawdown": -23.0,
+        "avgTradeProfit": 3.87
       }
     },
     "balanced": {
@@ -48,11 +48,11 @@
         "leverage": 5
       },
       "performanceMeta": {
-        "tradeCount": 23,
-        "winrate": 82.61,
-        "netProfit": 783.61,
-        "maxDrawdown": -30,
-        "avgTradeProfit": 34.07
+        "tradeCount": 26,
+        "winrate": 76.92,
+        "netProfit": 329.46,
+        "maxDrawdown": -34.77,
+        "avgTradeProfit": 12.67
       }
     },
     "aggressive": {
@@ -64,11 +64,11 @@
         "leverage": 7
       },
       "performanceMeta": {
-        "tradeCount": 23,
-        "winrate": 82.61,
-        "netProfit": 1353.4,
-        "maxDrawdown": -42,
-        "avgTradeProfit": 58.84
+        "tradeCount": 26,
+        "winrate": 76.92,
+        "netProfit": 374.79,
+        "maxDrawdown": -52.16,
+        "avgTradeProfit": 14.42
       }
     }
   }

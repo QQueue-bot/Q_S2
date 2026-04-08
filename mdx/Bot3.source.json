@@ -4,7 +4,7 @@
     "asset": "PAXG"
   },
   "signalBotSourceMeta": {
-    "optimizedPeriod": "180 Days",
+    "optimizedPeriod": "2026-04-08 refresh",
     "exchange": "Bybit",
     "timeframe": "130m",
     "signalSetting": 4,
@@ -14,29 +14,29 @@
     "slValue": 6.2
   },
   "sourcePerformanceMeta": {
-    "performance30d": 12.83,
-    "performance90d": 117.32,
-    "performance180d": 186.27,
+    "performance30d": 12.39,
+    "performance90d": 85.07,
+    "performance180d": null,
     "performance360d": null,
-    "winrate": 62.26,
-    "profitFactor": 2.558
+    "winrate": 60.42,
+    "profitFactor": null
   },
   "defaultProfile": "balanced",
   "profiles": {
     "safe": {
       "strategy": {
-        "tpTargetsPercent": [0.23, 0.68, 1.37, 2.95, 4.62, 7.47],
-        "tpAllocationsPercent": [26, 22, 17, 15, 10, 10],
+        "tpTargetsPercent": [0.23, 0.68, 1.37, 2.93, 4.62, 7.47],
+        "tpAllocationsPercent": [26, 22, 17, 16, 10, 10],
         "stopLossPercent": 3,
         "slToBeTrigger": "TP4",
-        "leverage": 5
+        "leverage": 4
       },
       "performanceMeta": {
-        "tradeCount": 53,
-        "winrate": 62.26,
-        "netProfit": 186.27,
-        "maxDrawdown": -11.01,
-        "avgTradeProfit": 3.51
+        "tradeCount": 48,
+        "winrate": 66.67,
+        "netProfit": 144.64,
+        "maxDrawdown": -9.27,
+        "avgTradeProfit": 3.01
       }
     },
     "balanced": {
@@ -48,27 +48,27 @@
         "leverage": 8
       },
       "performanceMeta": {
-        "tradeCount": 53,
-        "winrate": 56.6,
-        "netProfit": 885.16,
+        "tradeCount": 48,
+        "winrate": 60.42,
+        "netProfit": 1045.47,
         "maxDrawdown": null,
-        "avgTradeProfit": 16.7
+        "avgTradeProfit": 21.78
       }
     },
     "aggressive": {
       "strategy": {
         "tpTargetsPercent": [0.47, 0.95, 1.84, 3.09, 4.89, 10.48],
         "tpAllocationsPercent": [8, 8, 24, 25, 24, 11],
-        "stopLossPercent": 2,
+        "stopLossPercent": 3,
         "slToBeTrigger": "TP3",
         "leverage": 12
       },
       "performanceMeta": {
-        "tradeCount": 53,
-        "winrate": 54.72,
-        "netProfit": 1757.59,
-        "maxDrawdown": -48.66,
-        "avgTradeProfit": 33.16
+        "tradeCount": 48,
+        "winrate": 58.33,
+        "netProfit": 3065.07,
+        "maxDrawdown": -41.67,
+        "avgTradeProfit": 63.86
       }
     }
   }

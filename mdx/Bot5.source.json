@@ -4,7 +4,7 @@
     "asset": "WIF"
   },
   "signalBotSourceMeta": {
-    "optimizedPeriod": "90 Days",
+    "optimizedPeriod": "2026-04-08 refresh",
     "exchange": "Bitget",
     "timeframe": "150m",
     "signalSetting": 5,
@@ -14,12 +14,12 @@
     "slValue": 3.2
   },
   "sourcePerformanceMeta": {
-    "performance30d": 46.44,
-    "performance90d": 281.87,
+    "performance30d": 17.71,
+    "performance90d": 308.61,
     "performance180d": null,
     "performance360d": null,
-    "winrate": 55.56,
-    "profitFactor": 2.848
+    "winrate": 46.67,
+    "profitFactor": null
   },
   "defaultProfile": "balanced",
   "profiles": {
@@ -32,27 +32,27 @@
         "leverage": 3
       },
       "performanceMeta": {
-        "tradeCount": 27,
-        "winrate": 55.56,
-        "netProfit": 281.87,
+        "tradeCount": 30,
+        "winrate": 53.33,
+        "netProfit": 308.61,
         "maxDrawdown": -17.19,
-        "avgTradeProfit": 10.44
+        "avgTradeProfit": 10.29
       }
     },
     "balanced": {
       "strategy": {
         "tpTargetsPercent": [1.97, 5.67, 9.26, 12.32, 16.91, 26.92],
         "tpAllocationsPercent": [8, 27, 25, 24, 8, 8],
-        "stopLossPercent": 3,
+        "stopLossPercent": 2,
         "slToBeTrigger": "TP3",
-        "leverage": 7
+        "leverage": 4
       },
       "performanceMeta": {
-        "tradeCount": 27,
-        "winrate": 51.85,
-        "netProfit": 2658.67,
-        "maxDrawdown": -37.59,
-        "avgTradeProfit": 98.47
+        "tradeCount": 30,
+        "winrate": 46.67,
+        "netProfit": 650.95,
+        "maxDrawdown": -25.72,
+        "avgTradeProfit": 21.7
       }
     },
     "aggressive": {
@@ -64,11 +64,11 @@
         "leverage": 7
       },
       "performanceMeta": {
-        "tradeCount": 27,
-        "winrate": 40.74,
-        "netProfit": 1997.98,
+        "tradeCount": 30,
+        "winrate": 40.0,
+        "netProfit": 2372.17,
         "maxDrawdown": -44.13,
-        "avgTradeProfit": 74
+        "avgTradeProfit": 79.07
       }
     }
   }
