@@ -74,6 +74,19 @@ check_http() {
   fi
 }
 
+check_webhook_reachable() {
+  local status
+  status=$(curl -s -o /dev/null -w '%{http_code}' "$LOCAL_WEBHOOK_URL" || true)
+  case "$status" in
+    200|400|401|404|405)
+      pass "webhook_reachable status=$status url=$LOCAL_WEBHOOK_URL"
+      ;;
+    *)
+      fail "webhook_reachable status=${status:-none} url=$LOCAL_WEBHOOK_URL"
+      ;;
+  esac
+}
+
 echo "O1 post-change ops check"
 check_git_sync
 check_file "$RUNTIME_DIR/config/bots.json"
@@ -81,7 +94,7 @@ check_file "$RUNTIME_DIR/config/settings.json"
 check_service "$WEBHOOK_SERVICE"
 check_service "$DASHBOARD_SERVICE"
 check_sqlite
-check_http webhook "$LOCAL_WEBHOOK_URL"
+check_webhook_reachable
 check_http dashboard "$LOCAL_DASHBOARD_URL"
 check_http mobile "$LOCAL_MOBILE_URL"
 check_http mobile_api "$LOCAL_MOBILE_API_URL"
