@@ -213,9 +213,22 @@ function computePnlPercent(positionSide, entryPrice, markPrice) {
   return null;
 }
 
-function hasBreakEvenArmed(persistence, symbol) {
+function hasBreakEvenArmed(persistence, symbol, livePosition = null) {
   const events = persistence.getBreakEvenEvents ? persistence.getBreakEvenEvents() : [];
-  return events.some(event => event.symbol === symbol && event.event_type === 'armed');
+  const entryTimestampMs = livePosition?.createdTime ? Number(livePosition.createdTime) : null;
+  return events.some(event => {
+    if (event.symbol !== symbol || event.event_type !== 'armed') {
+      return false;
+    }
+    if (!entryTimestampMs) {
+      return true;
+    }
+    const eventTimestampMs = Date.parse(event.created_at);
+    if (Number.isNaN(eventTimestampMs)) {
+      return false;
+    }
+    return eventTimestampMs >= entryTimestampMs;
+  });
 }
 
 function shouldTriggerBreakEven(settings, livePosition, persistence) {
@@ -228,7 +241,7 @@ function shouldTriggerBreakEven(settings, livePosition, persistence) {
     return { type: 'none' };
   }
 
-  const armed = hasBreakEvenArmed(persistence, livePosition.symbol);
+  const armed = hasBreakEvenArmed(persistence, livePosition.symbol, livePosition);
   const triggerPercent = Number(settings.breakEven.triggerPercent);
   const entryPrice = Number(livePosition.avgPrice || 0);
   const markPrice = Number(livePosition.markPrice || 0);
