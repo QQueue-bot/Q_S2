@@ -34,7 +34,7 @@
     },
     {
       "botId": "Bot3",
-      "enabled": false,
+      "enabled": true,
       "symbol": "PAXGUSDT",
       "settingsRef": "./settings.json",
       "credentialRef": {
@@ -66,7 +66,7 @@
     },
     {
       "botId": "Bot5",
-      "enabled": false,
+      "enabled": true,
       "symbol": "WIFUSDT",
       "settingsRef": "./settings.json",
       "credentialRef": {
@@ -82,7 +82,7 @@
     },
     {
       "botId": "Bot6",
-      "enabled": false,
+      "enabled": true,
       "symbol": "IPUSDT",
       "settingsRef": "./settings.json",
       "credentialRef": {
@@ -98,7 +98,7 @@
     },
     {
       "botId": "Bot7",
-      "enabled": false,
+      "enabled": true,
       "symbol": "FLOKIUSDT",
       "settingsRef": "./settings.json",
       "credentialRef": {
@@ -114,7 +114,7 @@
     },
     {
       "botId": "Bot8",
-      "enabled": false,
+      "enabled": true,
       "symbol": "PUMPFUNUSDT",
       "settingsRef": "./settings.json",
       "credentialRef": {
