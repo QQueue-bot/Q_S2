@@ -2,7 +2,7 @@
   "bots": [
     {
       "botId": "Bot1",
-      "enabled": true,
+      "enabled": false,
       "symbol": "STXUSDT",
       "settingsRef": "./settings.json",
       "credentialRef": {
