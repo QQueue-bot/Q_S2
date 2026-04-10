@@ -101,7 +101,7 @@
     "level": "info"
   },
   "s3": {
-    "enabled": false,
+    "enabled": true,
     "klineInterval": "60",
     "klineLookback": 20,
     "htfInterval": "240",
