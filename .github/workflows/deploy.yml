@@ -11,10 +11,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: SSH and run deploy.sh
+      - name: SSH and deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
-          script: bash /home/ubuntu/.openclaw/workspace/Q_S2/deploy.sh
+          script: |
+            git -C /home/ubuntu/.openclaw/workspace/Q_S2 pull
+            rsync -a /home/ubuntu/.openclaw/workspace/Q_S2/ /tmp/qs2_review/
+            sudo systemctl restart q-s2-webhook
