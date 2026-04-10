@@ -100,6 +100,23 @@
   "logging": {
     "level": "info"
   },
+  "s3": {
+    "enabled": false,
+    "klineInterval": "60",
+    "klineLookback": 20,
+    "htfInterval": "240",
+    "htfLookback": 20,
+    "winLossStreakLookback": 10,
+    "weights": {
+      "rsi": 0.25,
+      "vwap": 0.25,
+      "volumeSpike": 0.20,
+      "htfTrend": 0.20,
+      "winLossStreak": 0.10,
+      "supportResistance": 0.00
+    },
+    "notes": "Shadow-mode scoring only. No execution changes. supportResistance is stubbed at neutral weight 0 in v1."
+  },
   "configVersion": "1.0.0",
   "priceMonitoring": {
     "enabled": true,
