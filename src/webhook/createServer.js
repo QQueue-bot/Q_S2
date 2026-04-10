@@ -7,6 +7,7 @@ const { resolveBotContext } = require('../config/resolveBotContext');
 const { createRiskEngine } = require('../risk/evaluateSignal');
 const { executePaperTrade } = require('../execution/bybitExecution');
 const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite');
+const { computeS3Score } = require('../scoring/computeS3Score');
 
 function isHeartbeatSignal(input) {
   return typeof input === 'string' && input.trim().toUpperCase() === 'S2_HEARTBEAT';
@@ -156,6 +157,35 @@ function createWebhookServer(options = {}) {
               });
             }
           });
+
+          // S3 shadow scoring — fire-and-forget, runs concurrently with execution.
+          // Never gates or delays executePaperTrade. Scores ENTER signals only.
+          const s3Config = botContext.settings?.s3;
+          const isEnterSignal = parsedSignal.signal === 'ENTER_LONG' || parsedSignal.signal === 'ENTER_SHORT';
+          if (s3Config?.enabled && isEnterSignal) {
+            const bybitBaseUrl = process.env.BYBIT_BASE_URL || 'https://api-demo.bybit.com';
+            computeS3Score({
+              signal: parsedSignal.signal,
+              botId: parsedSignal.botId,
+              symbol: botContext.symbol,
+              db: persistence,
+              s3Config,
+              bybitBaseUrl,
+            }).then(s3Result => {
+              logger.info('[S3] Score', {
+                botId: s3Result.botId,
+                symbol: s3Result.symbol,
+                signal: s3Result.signal,
+                score: s3Result.score,
+                latencyMs: s3Result.latencyMs,
+                dataAvailable: s3Result.dataAvailable,
+                components: s3Result.components,
+              });
+              persistence.recordS3Score(s3Result);
+            }).catch(err => {
+              logger.warn('[S3] Score computation failed', { error: err.message, botId: parsedSignal.botId });
+            });
+          }
         }
 
         return json(res, 200, {

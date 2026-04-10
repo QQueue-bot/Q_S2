@@ -136,6 +136,18 @@ function initSchema(db) {
       level_name TEXT,
       details_json TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS s3_scores (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      scored_at TEXT NOT NULL,
+      bot_id TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      signal TEXT NOT NULL,
+      score INTEGER NOT NULL,
+      components_json TEXT NOT NULL,
+      latency_ms INTEGER NOT NULL,
+      data_available INTEGER NOT NULL
+    );
   `);
 
   const ensureColumn = (tableName, columnName, columnSql) => {
@@ -247,6 +259,21 @@ function buildPersistence(db) {
     )
   `);
 
+  const insertS3Score = db.prepare(`
+    INSERT INTO s3_scores (
+      scored_at, bot_id, symbol, signal, score, components_json, latency_ms, data_available
+    ) VALUES (
+      @scored_at, @bot_id, @symbol, @signal, @score, @components_json, @latency_ms, @data_available
+    )
+  `);
+
+  const getRecentExitEventsForBotStmt = db.prepare(`
+    SELECT * FROM exit_events
+    WHERE bot_id = @bot_id
+    ORDER BY id DESC
+    LIMIT @limit
+  `);
+
   const findTradeStateEventByKeyStmt = db.prepare(`
     SELECT * FROM trade_state_events
     WHERE trade_id = @trade_id
@@ -345,6 +372,24 @@ function buildPersistence(db) {
     },
     getLatestHeartbeatEvent() {
       return db.prepare('SELECT * FROM heartbeat_events ORDER BY id DESC LIMIT 1').get() || null;
+    },
+    recordS3Score(result) {
+      return insertS3Score.run({
+        scored_at: result.scoredAt,
+        bot_id: result.botId,
+        symbol: result.symbol,
+        signal: result.signal,
+        score: result.score,
+        components_json: JSON.stringify(result.components),
+        latency_ms: result.latencyMs,
+        data_available: result.dataAvailable ? 1 : 0,
+      });
+    },
+    getS3Scores() {
+      return db.prepare('SELECT * FROM s3_scores ORDER BY id DESC').all();
+    },
+    getRecentExitEventsForBot({ bot_id, limit }) {
+      return getRecentExitEventsForBotStmt.all({ bot_id, limit });
     },
   };
 }

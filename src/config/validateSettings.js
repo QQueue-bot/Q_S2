@@ -34,7 +34,7 @@ function checkType(value, expected, objPath, issues) {
 function validateSettingsObject(settings) {
   const issues = [];
 
-  const topAllowed = ['configVersion', 'environment', 'trading', 'positionSizing', 'riskControls', 'takeProfit', 'stopLoss', 'breakEven', 'dca', 'storage', 'logging', 'priceMonitoring'];
+  const topAllowed = ['configVersion', 'environment', 'trading', 'positionSizing', 'riskControls', 'takeProfit', 'stopLoss', 'breakEven', 'dca', 'storage', 'logging', 'priceMonitoring', 's3'];
   checkType(settings, 'object', 'settings', issues);
   if (!isPlainObject(settings)) {
     return finalize(settings, issues);
@@ -164,6 +164,28 @@ function validateSettingsObject(settings) {
   if (isPlainObject(logging)) {
     checkUnknownKeys(logging, ['level'], 'settings.logging', issues);
     if (!['debug', 'info', 'warn', 'error'].includes(logging.level)) addIssue(issues, 'error', 'settings.logging.level', 'Must be debug, info, warn, or error');
+  }
+
+  const s3 = settings.s3;
+  checkType(s3, 'object', 'settings.s3', issues);
+  if (isPlainObject(s3)) {
+    checkUnknownKeys(s3, ['enabled', 'klineInterval', 'klineLookback', 'htfInterval', 'htfLookback', 'winLossStreakLookback', 'weights', 'notes'], 'settings.s3', issues);
+    if (typeof s3.enabled !== 'boolean') addIssue(issues, 'error', 'settings.s3.enabled', 'Must be boolean');
+    if (typeof s3.klineInterval !== 'string' || !s3.klineInterval.trim()) addIssue(issues, 'error', 'settings.s3.klineInterval', 'Must be a non-empty string');
+    if (typeof s3.klineLookback !== 'number' || s3.klineLookback < 15) addIssue(issues, 'error', 'settings.s3.klineLookback', 'Must be >= 15 (RSI-14 requires at least 15 candles)');
+    if (typeof s3.htfInterval !== 'string' || !s3.htfInterval.trim()) addIssue(issues, 'error', 'settings.s3.htfInterval', 'Must be a non-empty string');
+    if (typeof s3.htfLookback !== 'number' || s3.htfLookback < 2) addIssue(issues, 'error', 'settings.s3.htfLookback', 'Must be >= 2');
+    if (typeof s3.winLossStreakLookback !== 'number' || s3.winLossStreakLookback < 1) addIssue(issues, 'error', 'settings.s3.winLossStreakLookback', 'Must be >= 1');
+    if (isPlainObject(s3.weights)) {
+      checkUnknownKeys(s3.weights, ['rsi', 'vwap', 'volumeSpike', 'htfTrend', 'winLossStreak', 'supportResistance'], 'settings.s3.weights', issues);
+      for (const key of ['rsi', 'vwap', 'volumeSpike', 'htfTrend', 'winLossStreak', 'supportResistance']) {
+        if (typeof s3.weights[key] !== 'number' || s3.weights[key] < 0 || s3.weights[key] > 1) {
+          addIssue(issues, 'error', `settings.s3.weights.${key}`, 'Must be a number between 0 and 1');
+        }
+      }
+    } else {
+      addIssue(issues, 'error', 'settings.s3.weights', 'Must be an object');
+    }
   }
 
   const zeroPlaceholdersPresent = (
