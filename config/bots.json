@@ -50,7 +50,7 @@
     },
     {
       "botId": "Bot4",
-      "enabled": true,
+      "enabled": false,
       "symbol": "CRVUSDT",
       "settingsRef": "./settings.json",
       "credentialRef": {
