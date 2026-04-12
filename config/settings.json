@@ -10,7 +10,12 @@
     "allowedSymbols": [
       "STXUSDT",
       "NEARUSDT",
-      "CRVUSDT"
+      "PAXGUSDT",
+      "CRVUSDT",
+      "WIFUSDT",
+      "IPUSDT",
+      "FLOKIUSDT",
+      "PUMPFUNUSDT"
     ],
     "supportedSignals": [
       "ENTER_LONG",
@@ -18,7 +23,7 @@
       "ENTER_SHORT",
       "EXIT_SHORT"
     ],
-    "notes": "Current active validation set is Bot1/STXUSDT, Bot2/NEARUSDT, and Bot4/CRVUSDT."
+    "notes": "Execution allowlist expanded to support the full multi-bot symbol set; actual live trading is still controlled by per-bot enabled state in bots.json."
   },
   "positionSizing": {
     "mode": "account_percent",
