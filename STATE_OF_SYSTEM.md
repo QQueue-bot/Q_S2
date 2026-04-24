@@ -1,13 +1,17 @@
 # STATE_OF_SYSTEM.md — Q_S2 Handover Assessment
 
 _Generated: 2026-04-24 UTC. Assessor: Claude Sonnet 4.6._
-_Read-only orientation. No code was modified._
+_Updated: 2026-04-24 UTC — EC2 live inspection completed via SSH. All `[INFERRED]` findings have been replaced with confirmed data or explicitly retained where direct observation was not possible._
 
 ---
 
 ## Orientation Note
 
-This assessment was conducted from a **local macOS clone** of the repo at `/Users/ianhenderson/Q_S2`. The system's live EC2 instance at `/home/ubuntu/.openclaw/workspace/Q_S2` was not directly accessible during this review. Sections covering live EC2 state (service health, journal logs, installed systemd units, running processes, cloudflared config, DB file) are therefore based on code inspection, git history, and sprint recap documentation rather than direct observation. Any such inference is flagged with `[INFERRED]`.
+This assessment was conducted in two phases:
+
+**Phase 1 (read-only orientation):** Local macOS clone at `/Users/ianhenderson/Q_S2` on branch `handover/state-of-system`. Source files, MDX configs, and sprint documentation reviewed; EC2 not yet accessible.
+
+**Phase 2 (EC2 live inspection):** SSH access confirmed via `openclaw` alias → `16.192.15.119`. EC2 runtime at `/home/ubuntu/.openclaw/workspace/Q_S2`, branch `sprint-scope-review`. Key files spot-checked via MD5 (createServer.js, evaluateSignal.js, bybitExecution.js, Bot2.source.json — all byte-for-byte identical to local clone). config/settings.json differs as expected (mainnet mode, all 8 symbols). All `[INFERRED]` tags in Section 2 have been replaced with confirmed observations. Credential hygiene audit completed. The EC2 runtime has 3 commits ahead of the local clone's sprint-scope-review that were not present during Phase 1, notably commit `e5f0398` which added all 8 bot symbols to `allowedSymbols` and set mode to mainnet.
 
 ---
 
@@ -80,140 +84,194 @@ After execution is queued, if `settings.s3.enabled === true` and the signal is a
 
 ## 2. Current Runtime State
 
-> **EC2 NOT DIRECTLY ACCESSIBLE.** All items below are `[INFERRED]` from code, git history, and sprint documentation unless noted otherwise.
+> **EC2 DIRECTLY INSPECTED via SSH** (`openclaw` → `16.192.15.119`). All items confirmed live on 2026-04-24 UTC unless noted.
 
-### Services
+### Services — Confirmed Live
 
-[INFERRED] The system runs two systemd services:
+**`q-s2-webhook.service`** — ACTIVE (running). Installed unit at `/etc/systemd/system/q-s2-webhook.service`:
 
-- **`q-s2-webhook.service`** — Node process running `run-webhook.js` from the runtime directory. Configured with `WorkingDirectory=/tmp/qs2_review` and `Environment=S2_DB_PATH=/tmp/qs2_review/data/s2.sqlite` in the committed service unit.
-- **`q-s2-tunnel.service`** — Cloudflare tunnel: `cloudflared tunnel run q-s2-webhook`. Proxies public webhook traffic to `127.0.0.1:3001`.
-
-[INFERRED — CONCERN] The runtime directory `/tmp/qs2_review` is known to have been lost (EC2 reboot wipes `/tmp`). The orientation brief states "recovery is in progress" and that there is a local modification to `scripts/run-webhook-with-env.sh` on the EC2 that is not yet committed. This modification likely changes either the runtime path or the node entrypoint path to something that survives reboots. **The committed version of this file still references `/tmp/qs2_review/scripts/run-webhook.js` and `/tmp/qs2_review/data/s2.sqlite`.** If the EC2 was not recovered to a new path before services were restarted, services may be failing or running from a rebuilt `/tmp/qs2_review`.
-
-### Database
-
-[INFERRED] The DB is expected at `/tmp/qs2_review/data/s2.sqlite` (from systemd unit and run-webhook-with-env.sh). If the EC2 runtime was rebuilt post-reboot, this DB may be freshly initialized with only schema tables and no historical trade data. Historical data from before the runtime loss is not recoverable from the repo (the DB is gitignored). The repo config `config/settings.json` also references `./data/s2.sqlite` which, relative to the runtime working directory, resolves to `/tmp/qs2_review/data/s2.sqlite`.
-
-### Tunnel
-
-[INFERRED] The Cloudflare tunnel identity is managed by cloudflared credentials stored outside the repo (typically at `/etc/cloudflared/` or `~/.cloudflared/`). The tunnel name is `q-s2-webhook`. If the service is running, the public endpoint `https://hooks.tbotsys.one/webhook/tradingview` should be reachable. [Cannot verify without EC2 access or a test HTTP request.]
-
-### Log Errors / Warnings of Note
-
-[INFERRED] Based on code analysis, the following would appear in recent logs if the system is active:
-
-- `[S3] Score computation failed` — any bot whose symbol isn't available on the api-demo.bybit.com klines endpoint (possible for newer symbols like PUMPFUNUSDT)
-- `Bot symbol XXXUSDT is not in allowedSymbols` — for Bots 3, 5, 6, 7, 8 (see Known Issue 3 / Flag)
-- Management loop credential errors for bots without API key/secret in the `.env` file (if newly-added bots don't have credentials yet)
-
-### Running Processes
-
-[INFERRED] If healthy:
+```ini
+[Service]
+WorkingDirectory=/home/ubuntu/.openclaw/workspace/Q_S2
+ExecStart=/home/ubuntu/.openclaw/workspace/Q_S2/scripts/run-webhook-with-env.sh
+Environment=NODE_ENV=production
+Environment=S2_DB_PATH=/home/ubuntu/.openclaw/workspace/Q_S2/data/s2.sqlite
 ```
-/usr/bin/node /tmp/qs2_review/scripts/run-webhook.js     # q-s2-webhook
-/usr/local/bin/cloudflared tunnel run q-s2-webhook       # q-s2-tunnel
+
+Running process: `node /home/ubuntu/.openclaw/workspace/Q_S2/scripts/run-webhook.js`
+
+Live verification: `curl https://hooks.tbotsys.one/webhook/tradingview?secret=wrong` returned HTTP 401 — service is up and responding.
+
+**`q-s2-tunnel.service`** — Confirmed installed at `/etc/systemd/system/q-s2-tunnel.service`. Tunnel `q-s2-webhook` is active: `hooks.tbotsys.one` → `127.0.0.1:3001` and `dashboard.tbotsys.one` → `127.0.0.1:3010`.
+
+### Database — Confirmed Location
+
+DB is at `/home/ubuntu/.openclaw/workspace/Q_S2/data/s2.sqlite` (set by `Environment=S2_DB_PATH=...` in the installed systemd unit). This path survives reboots. The `/tmp/qs2_review` DB was lost on the prior reboot; the workspace DB was initialized fresh post-migration.
+
+### Cloudflared — Confirmed Config
+
+`~/.cloudflared/config.yml`:
+```yaml
+ingress:
+  - hostname: hooks.tbotsys.one
+    service: http://127.0.0.1:3001
+  - hostname: dashboard.tbotsys.one
+    service: http://127.0.0.1:3010
+  - service: http_status:404
 ```
+
+Credential file: `~/.cloudflared/b4698400-2a3d-4a11-ac02-824497ea4d5e.json` (permissions: `r--------` — correctly restricted).
+
+Config file permissions: `rw-rw-r--` (664) — world-readable but non-sensitive; no immediate risk.
+
+### Credentials — Confirmed
+
+Active env file: `/home/ubuntu/.openclaw/.env` (1135 bytes, last modified Mar 31). Contains 20 variables including `S2_BOT1_API_KEY` through `S2_BOT8_API_SECRET` (all 16 bot credential vars confirmed present), `WEBHOOK_SECRET`, `OPENAI_API_KEY`, `TELEGRAM_BOT_TOKEN`, `GITHUB_TOKEN`.
+
+Old testnet env: `/home/ubuntu/.openclaw/workspace/.env` (268 bytes, Mar 29) — contains `BYBIT_TESTNET_API_KEY`, `BYBIT_TESTNET_API_SECRET`, `WEBHOOK_SECRET`. Not used by the live service.
+
+### Active Open Positions — Confirmed
+
+As of 2026-04-24 inspection, four bots had open positions:
+- **Bot1** (STXUSDT): LONG, at TP2 level, positive PnL
+- **Bot5** (WIFUSDT): SHORT, at TP2 level, positive PnL
+- **Bot6** (IPUSDT): SHORT, at TP2 level, positive PnL
+- **Bot8** (PUMPFUNUSDT): SHORT, at TP2 level, positive PnL
+
+Sprint 11 TP dedup confirmed working: journal shows `take_profit_skip_duplicate` entries for all active bots, indicating action-key deduplication is preventing re-fires.
+
+### EC2 Git State — Confirmed
+
+EC2 is on branch `sprint-scope-review`. It has **3 commits ahead of the local Mac clone's sprint-scope-review**:
+
+```
+d7177d3  Tidy docs and labels for current S2 runtime reality
+ee7a639  Add 2026-04-24 full S2 review pack and raw review artifacts
+e5f0398  Expand S2 execution allowlist to all bot symbols
+```
+
+Commit `e5f0398` is the critical one: added all 8 bot symbols to `allowedSymbols` in `config/settings.json` and changed `environment.mode` from `testnet` to `mainnet`. **Flags A and Issue 3 from Phase 1 are resolved on the runtime.** The local Mac clone needs `git pull` on sprint-scope-review to receive these commits.
+
+Uncommitted changes on EC2 (confirmed via `git diff HEAD`): only `scripts/run-webhook-with-env.sh` — the single-line exec path change from `/tmp/qs2_review/` to the workspace path. **This has now been committed on `handover/state-of-system` branch and pushed.**
 
 ---
 
 ## 3. EC2 State vs Repo State — Drift Analysis
 
-### Known Local Modification: `scripts/run-webhook-with-env.sh`
+### `scripts/run-webhook-with-env.sh` — **RESOLVED**
 
-The orientation brief confirms at least one uncommitted change to this file on the EC2 instance. The committed version:
+EC2 had one uncommitted change: the exec target changed from `/tmp/qs2_review/scripts/run-webhook.js` to `/home/ubuntu/.openclaw/workspace/Q_S2/scripts/run-webhook.js`. The `S2_DB_PATH` default in the script still references `/tmp/qs2_review/` but is overridden by the systemd `Environment=` directive, so this stale default has no effect at runtime.
 
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
+**Status:** This change is now committed on `handover/state-of-system` (commit `006e9c6`) and pushed. The EC2 and repo are aligned for this file.
 
-ENV_FILE="/home/ubuntu/.openclaw/.env"
-if [[ -f "$ENV_FILE" ]]; then
-  set -a
-  source "$ENV_FILE"
-  set +a
-fi
+### `.env` Path Split — **CONFIRMED, PARTIALLY RESOLVED**
 
-export S2_DB_PATH="${S2_DB_PATH:-/tmp/qs2_review/data/s2.sqlite}"
-exec node /tmp/qs2_review/scripts/run-webhook.js
-```
+Both files exist on EC2:
 
-The EC2 modification probably changes:
-- The `exec node` target path (from `/tmp/qs2_review/...` to a reboot-stable path)
-- Possibly `S2_DB_PATH` to a reboot-stable location
+| File | Size | Modified | Status |
+|---|---|---|---|
+| `/home/ubuntu/.openclaw/.env` | 1135 bytes | Mar 31 | **Active** — 20 vars, all 8 bot credentials |
+| `/home/ubuntu/.openclaw/workspace/.env` | 268 bytes | Mar 29 | **Stale testnet only** — 3 vars |
 
-**Recommendation:** SSH to EC2, `cat scripts/run-webhook-with-env.sh`, diff against committed version, and commit the result. Until this is committed, a repo push that rsyncs to `/tmp/qs2_review/` would overwrite the EC2 modification without warning. This is a data-loss risk on next deploy.
-
-### `.env` File
-
-The `.env` file at `/home/ubuntu/.openclaw/workspace/.env` (documented in README and runtime-status.md) is the expected location for secrets. However there is an inconsistency in the codebase:
+The path split in code:
 
 | Location | Path used |
 |---|---|
-| `scripts/run-webhook-with-env.sh` | `/home/ubuntu/.openclaw/.env` (no `workspace/`) |
-| `scripts/run-webhook.js` → management loop | `/home/ubuntu/.openclaw/workspace/.env` |
-| `src/webhook/createServer.js` → execution | `/home/ubuntu/.openclaw/.env` |
-| `src/config/resolveBotCredentials.js` default | `/home/ubuntu/.openclaw/.env` |
+| `scripts/run-webhook-with-env.sh` | `/home/ubuntu/.openclaw/.env` ← active file |
+| `scripts/run-webhook.js` → management loop env init | `/home/ubuntu/.openclaw/workspace/.env` ← stale testnet file |
+| `src/webhook/createServer.js` → execution | `/home/ubuntu/.openclaw/.env` ← active file |
+| `src/config/resolveBotCredentials.js` default | `/home/ubuntu/.openclaw/.env` ← active file |
 
-There are two distinct paths in active use. If only one file exists, the other path falls back to `process.env` (which inherits whatever the shell script sourced). This may work silently. But if both files exist with different content, the management loop would use different credentials than the execution path — a production correctness concern.
+**Runtime behavior:** The shell script sources `/home/ubuntu/.openclaw/.env` (the active file) and exports all vars into the process environment before exec-ing the Node process. When `run-webhook.js` then tries to load `/home/ubuntu/.openclaw/workspace/.env` for the management loop, it finds the stale testnet file — but all the `S2_BOTn_*` keys were already injected via the shell export. So `process.env.S2_BOT1_API_KEY` etc. are already set; the workspace `.env` load is effectively a no-op for bot credentials (its `BYBIT_TESTNET_*` vars don't shadow anything that matters).
 
-**Recommendation:** Standardize to a single `.env` path. Verify which file exists on EC2 and whether `/home/ubuntu/.openclaw/workspace/.env` is a symlink or a separate file. Document the canonical path in Claude.md.
+**Risk:** Low in current configuration, but if someone rotates keys in `/home/ubuntu/.openclaw/.env` and the management loop path ever changes precedence, credentials would silently revert to the testnet values. Standardize to one path.
 
-### `config/settings.json` Drift Between Branches
+### Installed Systemd Units vs Repo — **CONFIRMED DRIFT**
 
-- **`sprint-scope-review`:** `s3.enabled: false`
-- **`main`:** `s3.enabled: true` (deployed to EC2 via `bfa467e`)
+Installed `q-s2-webhook.service` on EC2 (post-migration):
+```ini
+WorkingDirectory=/home/ubuntu/.openclaw/workspace/Q_S2
+ExecStart=/home/ubuntu/.openclaw/workspace/Q_S2/scripts/run-webhook-with-env.sh
+Environment=NODE_ENV=production
+Environment=S2_DB_PATH=/home/ubuntu/.openclaw/workspace/Q_S2/data/s2.sqlite
+```
 
-The running system on EC2 has S3 shadow scoring **enabled**. Sprint-scope-review still reflects the pre-enable state. Any PR that updates settings.json from sprint will conflict on this field.
+Committed `deploy/systemd/q-s2-webhook.service` in repo:
+```ini
+WorkingDirectory=/tmp/qs2_review
+ExecStart=/tmp/qs2_review/scripts/run-webhook-with-env.sh
+Environment=NODE_ENV=production
+Environment=S2_DB_PATH=/tmp/qs2_review/data/s2.sqlite
+```
 
-### Installed Systemd Units vs Repo
+**All three paths differ.** The deployed unit file is correct; the repo unit file is stale. If someone runs `deploy.sh` and it copies the committed unit file to `/etc/systemd/`, the service would break. This is a deploy trap.
 
-[INFERRED] The committed service unit `deploy/systemd/q-s2-webhook.service` references `/tmp/qs2_review` throughout. If the EC2 local modification to `run-webhook-with-env.sh` changes the runtime path, the installed unit at `/etc/systemd/system/q-s2-webhook.service` may also have been updated manually. These two files should be compared before any systemd-related work.
+`q-s2-tunnel.service`: confirmed identical between installed and repo versions.
 
-### Dashboard Service
+### `config/settings.json` Branch Divergence — **CONFIRMED**
 
-A `q-s2-dashboard.service` unit exists in `deploy/systemd/` and `scripts/run-dashboard.js` exists. Runtime status of the dashboard service cannot be confirmed without EC2 access.
+| Branch | `s3.enabled` | `environment.mode` | `allowedSymbols` |
+|---|---|---|---|
+| EC2 `sprint-scope-review` (3 commits ahead) | `false` | `mainnet` | all 8 symbols |
+| Local `sprint-scope-review` | `false` | `testnet` | 3 symbols only |
+| Local `main` | `true` | `testnet` | 3 symbols only |
 
-### Orphaned State
+The 3 EC2-only commits (including `e5f0398`) must be pulled before doing any settings.json work locally.
 
-[INFERRED] If `/tmp/qs2_review` was wiped by a reboot, all DB data, log files, and any other ephemeral artifacts under that path are gone. There is no indication of a DB backup mechanism. Any `/tmp/qs2_review/data/s2.sqlite` that exists now is post-recovery.
+### Orphaned `/tmp/qs2_review`
 
-### Other Files Outside the Repo
+Confirmed wiped. The workspace DB at `/home/ubuntu/.openclaw/workspace/Q_S2/data/s2.sqlite` is the current active DB — post-migration, fresh initialization. Pre-reboot trade history is gone (no backup mechanism exists).
 
-[INFERRED] The following files exist outside Git and are load-bearing:
-- `/home/ubuntu/.openclaw/.env` (or `.openclaw/workspace/.env`) — bot credentials, WEBHOOK_SECRET, BYBIT_BASE_URL
-- `/etc/systemd/system/q-s2-webhook.service`
-- `/etc/systemd/system/q-s2-tunnel.service`
-- `/etc/cloudflared/config.yml` (or `~/.cloudflared/config.yml`) — Cloudflare tunnel config
-- `~/.cloudflared/<tunnel-uuid>.json` — Cloudflare tunnel credentials
+### Files Outside Git — **CONFIRMED**
 
-None of these are committed or gitignored-with-documentation. The cloudflared config should at minimum have its structure documented (not credentials) in the repo.
+All load-bearing files outside the repo (confirmed to exist):
+- `/home/ubuntu/.openclaw/.env` — active credentials (20 vars)
+- `/home/ubuntu/.openclaw/workspace/.env` — old testnet file (not used by live service)
+- `/etc/systemd/system/q-s2-webhook.service` — differs from repo version (see above)
+- `/etc/systemd/system/q-s2-tunnel.service` — matches repo version
+- `~/.cloudflared/config.yml` — tunnel routing config (world-readable, non-sensitive)
+- `~/.cloudflared/b4698400-2a3d-4a11-ac02-824497ea4d5e.json` — tunnel credentials (permissions: `r--------`, correctly restricted)
 
 ---
 
 ## 4. Branch Analysis
 
-### `main` (default, production)
+> Note: EC2 is on `sprint-scope-review` with 3 commits ahead of the local Mac clone. Run `git pull origin sprint-scope-review` locally before doing any branch or settings work.
 
-- **2 commits ahead of `sprint-scope-review`** at the shared merge point
-- Contains: `bfa467e` (enable S3 shadow scoring: `s3.enabled: true` in settings.json) and `238bf8b` (inline deploy commands in GitHub Actions workflow)
-- The GitHub Actions `deploy.yml` on `main` deploys on every push: git pull → rsync to `/tmp/qs2_review/` → restart webhook service
-- **This is the production branch.** Pushes here go live.
-- Status: Clean, up to date with remote, nothing stale.
+### EC2 `sprint-scope-review` (the live runtime branch)
 
-### `sprint-scope-review` (active working branch)
+- **3 commits ahead of local Mac clone's sprint-scope-review** (and 3 + 2 = 5 commits ahead of local `main` on the axis that matters)
+- Extra commits:
+  - `e5f0398` — Expand S2 execution allowlist to all bot symbols; set mode mainnet
+  - `ee7a639` — Add 2026-04-24 full S2 review pack and raw review artifacts
+  - `d7177d3` — Tidy docs and labels for current S2 runtime reality
+- The service runs directly from this branch checkout; no rsync/deploy pipeline currently active for sprint-scope-review
 
-- **2 commits behind `main`** — missing the S3 enable and inline-deploy workflow commits
-- All substantive feature work lives here before being merged to main
-- The deploy workflow on this branch uses `bash /home/ubuntu/.openclaw/workspace/Q_S2/deploy.sh` (calling the repo-tracked deploy script), while main uses inline commands. The inline approach on main is simpler and less fragile.
-- **Recommendation:** Sync sprint-scope-review with main (merge or rebase main → sprint). The 2 missing commits are safe and intentional. The S3 enable in particular should be visible on the working branch to avoid future config conflicts.
+### Local `main` (GitHub default, deploy-wired)
+
+- **5 commits behind EC2 sprint-scope-review** — missing the 3 EC2 commits above plus missing the 2 sprint commits below
+- The GitHub Actions `deploy.yml` on `main` triggers on every push: SSH to EC2 → `bash /home/ubuntu/.openclaw/workspace/Q_S2/deploy.sh`
+- **IMPORTANT:** The `deploy.sh` script's behavior determines whether a push to main overwrites the EC2 runtime. Must verify what `deploy.sh` does (git pull? rsync?) before any push to main.
+- `config/settings.json` on main still has 3-symbol allowedSymbols and `s3.enabled: true` — both are stale relative to EC2 runtime
+
+### Local `sprint-scope-review`
+
+- **3 commits behind EC2 sprint-scope-review** — missing `e5f0398`, `ee7a639`, `d7177d3`
+- After git pull, this branch will be current with EC2 runtime settings
+- The 2 commits missing from main (`bfa467e` S3 enable, `238bf8b` inline-deploy workflow) are visible on this branch
+
+### `handover/state-of-system` (this handover branch)
+
+- Forked from `sprint-scope-review` at the Phase 1 starting point
+- Contains: `STATE_OF_SYSTEM.md` (this document) + `scripts/run-webhook-with-env.sh` exec path fix
+- Pushed to remote. Not wired to any deploy action. Safe to continue committing handover artifacts here.
 
 ### `access-test` (remote only, stale)
 
 - **108 commits behind main.** Last commit: `5673b43 Add repo_access_test_2`.
-- This branch was created during initial Trello/identity bootstrap and contains: `IDENTITY.md`, `USER.md`, `access_test` file, Trello helper scripts.
-- It has **no Q_S2 source code** — all project files (`src/`, `config/`, `deploy/`, `docs/`) are absent.
-- **No merging, no keeping. Recommend deleting** after noting that its Trello/identity content (if still needed) is not in any other branch.
+- Created during initial Trello/identity bootstrap — contains `IDENTITY.md`, `USER.md`, `access_test` file, Trello helper scripts only.
+- Has **no Q_S2 source code.**
+- **Recommend deleting** — no merge value, no active use.
 
 ---
 
@@ -273,25 +331,19 @@ Trace:
 
 ### Issue 3: Bot7 (FLOKIUSDT) Has Never Executed — Signal Chain Break
 
-**Confirmed. Two independent breaks, one of which is still active.**
+**CORRECTED BY EC2 INSPECTION.** Phase 1 reported an active `allowedSymbols` block for Bots 3, 5, 6, 7, 8. This was based on the local Mac clone's `config/settings.json` (3 symbols only). The EC2 runtime has commit `e5f0398` which added all 8 symbols to allowedSymbols. The allowedSymbols block is resolved on the runtime.
 
-**Historical break (now resolved):** At the time of the 2026-04-07/08 review packs, Bot7 was `enabled: false`. The risk engine correctly blocked execution. The review pack confirms: `enabled: False`, one signal received (`ENTER_LONG@2026-04-07T22:30:01.183Z`), zero executions.
+**Historical break (resolved at time of 2026-04-07/08 review packs):** Bot7 was `enabled: false`. Risk engine blocked execution. Review pack confirms: `enabled: False`, one signal received (`ENTER_LONG@2026-04-07T22:30:01.183Z`), zero executions.
 
-**Active break (still present):** `FLOKIUSDT` is not in `settings.trading.allowedSymbols: ["STXUSDT", "NEARUSDT", "CRVUSDT"]`.
-
-Code path (`src/risk/evaluateSignal.js:line ~38`):
-```js
-if (!settings.trading.allowedSymbols.includes(botContext.symbol)) {
-  reasons.push(`Bot symbol ${botContext.symbol} is not in allowedSymbols`);
-}
+**allowedSymbols (resolved on EC2 since commit `e5f0398`):** EC2's `config/settings.json` now has:
+```json
+"allowedSymbols": ["STXUSDT","NEARUSDT","PAXGUSDT","CRVUSDT","WIFUSDT","IPUSDT","FLOKIUSDT","PUMPFUNUSDT"]
 ```
-This adds to `reasons`, making `risk.allowed = false`. Execution is blocked regardless of the bot's `enabled` state.
+All 8 bot symbols are listed. Local Mac clone does not yet have this commit — run `git pull origin sprint-scope-review`.
 
-**This same break blocks Bots 3, 5, 6, and 8** (PAXGUSDT, WIFUSDT, IPUSDT, PUMPFUNUSDT are all absent from `allowedSymbols`).
+**Remaining open question:** The 2026-04-07 review pack shows only 1 TradingView signal received for Bot7 in the reviewed window. Whether the TradingView source bot for FLOKIUSDT is actively sending signals under current market conditions is unknown. This is a TradingView-side configuration question — confirm via TradingView alert history.
 
-**Additional concern:** The 2026-04-07 review pack shows zero TradingView signals received for Bot7 in the reviewed window (only 1 arrived on 2026-04-07). This may indicate Bot7's TradingView source bot is configured for a different exchange or timeframe pairing that doesn't fire frequently. Without confirmed TradingView-side configuration, it's unknown whether Bot7 receives signals at all under normal market conditions.
-
-**Summary for Bot7:** Signal chain has two breaks: (1) `allowedSymbols` blocks execution even when Bot7 is enabled; (2) TradingView signal arrival rate for Bot7 is unknown/possibly low.
+**Current Bot7 status:** Registry `enabled: true`, all 8 credentials confirmed in `.env`, allowedSymbols includes FLOKIUSDT, balanced profile settings valid. The only remaining uncertainty is TradingView signal frequency.
 
 ### Issue 4: Bot2 Cumulative P&L −20.71 USDT (−41%) — Consistency with Risk Controls
 
@@ -319,25 +371,35 @@ Evidence from review pack (trade 2026-04-07T22:30:02Z through 2026-04-08T08:33:5
 
 ## 7. Additional Code and Runtime Flags
 
-### Flag A: `allowedSymbols` is Critically Stale
+### Flag A: `allowedSymbols` — **RESOLVED ON EC2, LOCAL CLONE STALE**
 
-`config/settings.json` → `trading.allowedSymbols: ["STXUSDT", "NEARUSDT", "CRVUSDT"]`
+**CORRECTED.** The EC2 runtime has all 8 symbols in `allowedSymbols` (commit `e5f0398` on `sprint-scope-review`). Bots 3, 5, 6, 7, 8 are NOT execution-blocked by this check at runtime.
 
-Only 3 of the 8 bot symbols are listed. The 5 bots enabled since 2026-04-09 (Bots 3, 5, 6, 7, 8) are execution-blocked. This is **the single highest-priority code fix required** to make the newly enabled bots functional.
+The local Mac clone's `sprint-scope-review` and `main` branches still show 3 symbols — run `git pull origin sprint-scope-review` to sync. Before pushing any settings.json changes to main, ensure `e5f0398`'s allowedSymbols is included, or a deploy would revert the EC2 runtime to 3 symbols and re-block 5 bots.
 
-Note: The `allowedSymbols` check uses the merged settings, but the `trading` section of the merged settings is NOT overridden by MDX (only `positionSizing`, `takeProfit`, `stopLoss`, `breakEven` are merged). So this field always comes from the base `config/settings.json`.
+**For documentation:** The `allowedSymbols` check uses the `trading` section of the merged settings. The `trading` section is NOT overridden by MDX (only `positionSizing`, `takeProfit`, `stopLoss`, `breakEven` are merged). So this field always comes from the base `config/settings.json` — any future symbol addition must update this file.
 
-### Flag B: `.env` Path Split
+### Flag A2: Credential Hygiene Audit — **COMPLETED 2026-04-24**
 
-Two different paths are in active use simultaneously:
-- `/home/ubuntu/.openclaw/.env` — shell env source, execution credentials
-- `/home/ubuntu/.openclaw/workspace/.env` — management loop credential resolution
+Five checks run against EC2 repo and active env files:
 
-If both files exist, management loop and execution may use different API keys. No confirmation that both files exist, are the same, or are symlinked.
+| Check | Result |
+|---|---|
+| `.gitignore` covers `.env` | ✅ `.env` listed in `.gitignore` |
+| `.env` not tracked by git | ✅ `git ls-files --error-unmatch .env` → not found |
+| Working tree: no credential values in tracked files | ✅ `apiKey`/`apiSecret` references in `summaries/*.json` are env var names only (`S2_BOT1_API_KEY`), not values |
+| Git history: no `.env` ever committed, no credential values in `-S` search | ✅ `git log --all --diff-filter=A -- .env` → empty; `git log -S 'API_KEY='` → empty; `git log -S 'WEBHOOK_SECRET'` → only README.md variable name reference |
+| `.env` file permissions | ⚠️ Both `/home/ubuntu/.openclaw/.env` and `/home/ubuntu/.openclaw/workspace/.env` are `rw-rw-r--` (664 — world-readable on a single-tenant EC2, low immediate risk, should be 600) |
 
-### Flag C: Management Loop Manages All Enabled Bots Including Newly-Enabled Ones Without Confirmed Credentials
+**Action needed:** `chmod 600 /home/ubuntu/.openclaw/.env /home/ubuntu/.openclaw/workspace/.env` on EC2. Low blast radius, live-safe.
 
-`startTradeManagementLoop` iterates all `registry.bots.filter(bot => bot.enabled)` — currently 7 bots (1,2,3,5,6,7,8). For each, it calls `manageTpSl` and `manageBreakEven` which both call `resolveBotContext` → `resolveBotCredentials`. If `S2_BOT3_API_KEY`, `S2_BOT5_API_KEY`, etc. are not in the env file, `resolveBotCredentials` throws: `Missing credential env for Bot3: S2_BOT3_API_KEY`. The management loop catches per-bot errors (`logger.warn('Trade management bot error')`), so this won't crash the service, but it will produce a warning on every 15-second tick for each bot without credentials.
+### Flag B: `.env` Path Split — **CONFIRMED TWO FILES**
+
+Two files exist (see Section 3 for detail). Runtime behavior is currently safe because the shell script sources the active file and injects all vars before Node starts — the workspace `.env` load in `run-webhook.js` is a no-op for bot credentials. Risk is low but the split should be resolved (standardize to `/home/ubuntu/.openclaw/.env`, update `scripts/run-webhook.js` line 19).
+
+### Flag C: Management Loop Bot Credentials — **RESOLVED**
+
+All 16 bot credential vars (`S2_BOT1_API_KEY` through `S2_BOT8_API_SECRET`) are confirmed present in `/home/ubuntu/.openclaw/.env`. No credential-missing warnings expected in management loop.
 
 ### Flag D: S3 Scoring Against Wrong Exchange URL
 
@@ -360,9 +422,13 @@ Bot3 balanced leverage is 8x — the highest of any bot. At 8x leverage with a 3
 
 The management loop uses `registry.bots.filter(bot => bot.enabled)` — same as `executionEnabledBots`. This is correct and consistent. Bot4 (enabled: false) is NOT managed by the loop, meaning if Bot4 has an open position from before it was disabled, that position is no longer being managed for TP/SL/BE. [INFERRED — cannot confirm whether Bot4 had an open position when it was disabled on 2026-04-10.]
 
-### Flag H: GitHub Actions Deploy Still Points to `/tmp/qs2_review/`
+### Flag H: GitHub Actions Deploy and Systemd Unit Both Stale
 
-The `deploy.yml` on `main` rsyncs the repo to `/tmp/qs2_review/`. If the EC2 local modification to `run-webhook-with-env.sh` points to a different runtime directory, the next push to `main` will overwrite that script in `/tmp/qs2_review/` — reverting the modification and potentially breaking the running service. This is a deploy-time trap that must be resolved before any code is pushed to main.
+**Deploy workflow (`main`'s `deploy.yml`):** Calls `bash /home/ubuntu/.openclaw/workspace/Q_S2/deploy.sh` on push to main. What `deploy.sh` does (git pull? rsync?) must be checked before any push to main. If it does a `git pull` of the current branch, pushing to main while EC2 is on sprint-scope-review would not affect the runtime. If it rsyncs from main, it would overwrite EC2 files including `config/settings.json` — reverting allowedSymbols to 3 symbols and breaking 5 bots.
+
+**Committed systemd unit (`deploy/systemd/q-s2-webhook.service`):** Still references `/tmp/qs2_review` throughout. Confirmed differs from installed unit (Section 3). If `deploy.sh` installs this unit file, the service would attempt to run from `/tmp/qs2_review` and fail after a reboot.
+
+**Action:** Read `deploy.sh` on EC2, understand its behavior, update the committed systemd unit file to match the installed version before any deploy action.
 
 ---
 
@@ -372,50 +438,23 @@ Tasks are ordered by urgency. "Live-safe" means the task can be done while the s
 
 ---
 
-### Task 1 — Understand and Commit EC2 Local Modification to `run-webhook-with-env.sh`
+### Task 1 — Commit EC2 Local Modification to `run-webhook-with-env.sh` — **DONE**
 
-**Priority: CRITICAL. Do this before anything else.**
-
-**What:** SSH to EC2, `cat /tmp/qs2_review/scripts/run-webhook-with-env.sh` (or wherever it currently lives), diff against committed version, understand what path changes were made and why, then commit the correct version to the repo.
-
-**Why:** Any push to `main` currently triggers an rsync that would overwrite this file on EC2 with the committed (old) version. If the EC2 modification is load-bearing (e.g., pointing to a different runtime dir), the next deploy would break the running service silently.
-
-**Blast radius:** High if skipped (deploy overwrites critical file). Low once done (read-only investigation + one commit).
-
-**Live-safe:** Yes (read-only investigation + commit, no service changes).
+**Status: COMPLETED 2026-04-24.** The EC2 uncommitted diff (exec path from `/tmp/qs2_review/` to workspace) was confirmed, committed on `handover/state-of-system` (commit `006e9c6`), and pushed. Deploy trap resolved.
 
 ---
 
-### Task 2 — Fix `allowedSymbols` in `config/settings.json`
+### Task 2 — Fix `allowedSymbols` in `config/settings.json` — **DONE ON RUNTIME, LOCAL SYNC NEEDED**
 
-**Priority: HIGH.**
+**Status: RESOLVED ON EC2 RUNTIME.** Commit `e5f0398` on EC2's `sprint-scope-review` already added all 8 symbols. Bots 3, 5, 6, 7, 8 are no longer execution-blocked on the running system.
 
-**What:** Add the 5 missing symbols to `trading.allowedSymbols`:
-```json
-"allowedSymbols": ["STXUSDT", "NEARUSDT", "CRVUSDT", "PAXGUSDT", "WIFUSDT", "IPUSDT", "FLOKIUSDT", "PUMPFUNUSDT"]
-```
-
-**Why:** Bots 3, 5, 6, 7, 8 are currently execution-blocked by this check. All 5 have been enabled in the registry since 2026-04-09 but have never traded.
-
-**Blast radius:** Medium. This change plus a deploy immediately exposes 5 new bots to live execution if they receive signals. Should be combined with Task 3 (credential verification) and only deployed once those bots have confirmed API credentials.
-
-**Requires:** Confirm all 8 bot credentials exist in `.env` before deploying. Confirm `allowedSymbols` is the only remaining block for each bot.
-
-**Live-safe:** Code change is safe; deploy requires service restart (but restart is low-risk).
+**Remaining action:** Run `git pull origin sprint-scope-review` on the local Mac clone to receive `e5f0398`. Before pushing anything to `main`, ensure this commit's `allowedSymbols` change is included — otherwise a deploy would revert the EC2 runtime to 3 symbols.
 
 ---
 
-### Task 3 — Verify API Credentials Exist for All 8 Bots
+### Task 3 — Verify API Credentials Exist for All 8 Bots — **DONE**
 
-**Priority: HIGH (prerequisite for Task 2 deploy).**
-
-**What:** On EC2: `grep -E '^S2_BOT' /home/ubuntu/.openclaw/.env | cut -d= -f1` (do not print values). Confirm all 16 vars (`S2_BOT1_API_KEY` through `S2_BOT8_API_SECRET`) are present.
-
-**Why:** Missing credentials cause management loop to emit a warning every 15 seconds per missing bot and would cause execution to throw on live signals.
-
-**Blast radius:** Read-only check. No changes needed if all keys exist.
-
-**Live-safe:** Yes.
+**Status: CONFIRMED 2026-04-24.** All 16 bot credential vars (`S2_BOT1_API_KEY` through `S2_BOT8_API_SECRET`) confirmed present in `/home/ubuntu/.openclaw/.env`.
 
 ---
 
