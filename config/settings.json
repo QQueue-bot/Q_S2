@@ -1,6 +1,6 @@
 {
   "environment": {
-    "mode": "testnet",
+    "mode": "mainnet",
     "exchange": "bybit",
     "marketType": "usdt_perpetual"
   },

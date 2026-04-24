@@ -1,9 +1,9 @@
 # Q_S2 - System Summary
 
-_Last updated: 2026-03-29 UTC._
+_Last updated: 2026-04-24 UTC._
 
-This README is a concise recovery and handover document for the `Q_S2` trading-system prototype.
-It summarizes what has been built across Sprints 1-15, what the system now does, and how the webhook/runtime automation is set up.
+This README is a concise recovery and handover document for the `Q_S2` trading system.
+It summarizes what has been built, what the system now does, and how the current webhook/runtime automation is set up.
 
 ---
 
@@ -12,7 +12,7 @@ It summarizes what has been built across Sprints 1-15, what the system now does,
 `Q_S2` is a controlled, config-driven trading execution system built around:
 
 - TradingView-style webhook alerts
-- Bybit Testnet / demo execution
+- real-money Bybit execution across per-bot accounts
 - SQLite persistence
 - staged sprint-based development with explicit validation and closeout
 
@@ -46,7 +46,7 @@ The system now supports:
   - human-readable text
 
 ### Execution behavior
-- controlled Bybit demo/testnet paper trade execution
+- controlled Bybit live execution with app-managed trade lifecycle handling
 - opposite-signal handling:
   - opposite entry = reversal intent
   - close current opposite position first
@@ -65,17 +65,17 @@ The system now supports:
 
 ---
 
-## 3. What the live test system currently looks like
+## 3. What the live system currently looks like
 
 ### Repo path
 - `/home/ubuntu/.openclaw/workspace/Q_S2`
 
-### Observed live runtime path
-- `/tmp/qs2_review`
+### Current active repo/runtime path
+- `/home/ubuntu/.openclaw/workspace/Q_S2`
 
 ### Important note
-Historically, the active runtime was observed under `/tmp/qs2_review`, while the tracked repo clone was in the workspace path above.
-This distinction matters for troubleshooting and recovery.
+Historically, an active runtime was operated under `/tmp/qs2_review`, but that path proved ephemeral and was lost during the 2026-04-24 outage/recovery event.
+Current documentation should treat the workspace repo path above as the active durable runtime reference unless intentionally changed again.
 
 ### Public webhook endpoint
 - `https://hooks.tbotsys.one/webhook/tradingview`
@@ -101,12 +101,11 @@ Relevant repo files:
 
 ### Secrets / environment
 Secrets are expected outside Git, loaded from:
-- `/home/ubuntu/.openclaw/workspace/.env`
+- `/home/ubuntu/.openclaw/.env`
 
 Important env values include:
 - `WEBHOOK_SECRET`
-- `BYBIT_TESTNET_API_KEY`
-- `BYBIT_TESTNET_API_SECRET`
+- per-bot Bybit API keys / secrets (for example `S2_BOT1_API_KEY`, `S2_BOT1_API_SECRET`)
 
 Do **not** commit real `.env` contents.
 
@@ -136,19 +135,19 @@ Added webhook ingestion path for POSTed signals.
 Added core persistence tables and write paths.
 
 ### Sprint 8 - Price Monitoring
-Added Bybit testnet price monitoring and price tick capture.
+Added Bybit price monitoring and price tick capture.
 
 ### Sprint 9 - Risk Engine / Pre-Trade Checks
 Added pre-trade guardrails and safety checks.
 
-### Sprint 10 - Execute Paper Trade
-Added first successful paper trade path to Bybit demo/testnet.
+### Sprint 10 - Execute Trade Path
+Added the first successful exchange execution path.
 
 ### Sprint 10 Recap
 Performed continuity repair and verified the end-to-end path:
 - webhook ingress
 - signal parsing
-- Bybit demo execution
+- Bybit execution
 - persistence
 - Cloudflare + systemd runtime setup
 
@@ -265,13 +264,13 @@ Using mark price:
 
 ## 7. Safety / recovery notes
 
-### Config baseline vs live test config
+### Config baseline vs historical runtime config
 The repo `config/settings.json` is intentionally kept as a conservative baseline.
-Historically, a more permissive live test config existed in `/tmp/qs2_review/config/settings.json`.
+Historically, a more permissive live runtime config existed under `/tmp/qs2_review/config/settings.json` before the `/tmp` runtime was lost on 2026-04-24.
 Do not blindly assume the repo baseline and live runtime config are identical.
 
-### The live test system should be treated as test/demo runtime
-This project has validated a strong paper-trade and automation path, but it should still be treated as a controlled test/demo system unless explicitly hardened further.
+### Live operational reality
+As of 2026-04-24, live Bybit mainnet bot accounts show real balances, executions, open positions, and closed PnL. The repo still contains some older validation-era language elsewhere; treat exchange-side evidence and the 2026-04-24 review pack as the stronger operational truth.
 
 ### Review order if recovering context later
 If context is lost in future, check in this order:
