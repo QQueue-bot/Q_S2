@@ -1,0 +1,1722 @@
+[
+  {
+    "botId": "Bot1",
+    "symbol": "STXUSDT",
+    "enabled": true,
+    "mdxProfile": "balanced",
+    "dcaEnabled": false,
+    "settings": {
+      "bot": {
+        "botId": "Bot1",
+        "enabled": true,
+        "symbol": "STXUSDT",
+        "settingsRef": "./settings.json",
+        "credentialRef": {
+          "apiKeyEnv": "S2_BOT1_API_KEY",
+          "apiSecretEnv": "S2_BOT1_API_SECRET"
+        },
+        "mdxSourceRef": "../mdx/Bot1.source.json",
+        "mdxProfile": "balanced",
+        "dcaPolicy": {
+          "enabled": false
+        },
+        "notes": "Primary verified live-routed bot for Milestone C; operator mapping corrected so Bot1 is STX and MDX-derived settings remain the runtime source of truth"
+      },
+      "symbol": "STXUSDT",
+      "settingsPath": "/home/ubuntu/.openclaw/workspace/Q_S2/config/settings.json",
+      "settings": {
+        "environment": {
+          "mode": "testnet",
+          "exchange": "bybit",
+          "marketType": "usdt_perpetual"
+        },
+        "trading": {
+          "enabled": true,
+          "defaultSymbol": "STXUSDT",
+          "allowedSymbols": [
+            "STXUSDT",
+            "NEARUSDT",
+            "PAXGUSDT",
+            "CRVUSDT",
+            "WIFUSDT",
+            "IPUSDT",
+            "FLOKIUSDT",
+            "PUMPFUNUSDT"
+          ],
+          "supportedSignals": [
+            "ENTER_LONG",
+            "EXIT_LONG",
+            "ENTER_SHORT",
+            "EXIT_SHORT"
+          ],
+          "notes": "Execution allowlist expanded to support the full multi-bot symbol set; actual live trading is still controlled by per-bot enabled state in bots.json."
+        },
+        "positionSizing": {
+          "mode": "account_percent",
+          "accountPercent": 10,
+          "leverage": 5,
+          "notes": "Cautious live validation baseline: use 10% of account until all bots are proven operationally."
+        },
+        "riskControls": {
+          "maxAccountPercent": 50,
+          "maxLeverage": 10,
+          "allowExitSignalsAsSafety": true,
+          "killSwitch": false,
+          "duplicateSignalWindowSeconds": 0,
+          "staleSignalThresholdSeconds": 0,
+          "notes": "Duplicate/stale signal controls are scaffolded here for later enforcement. Zero values are placeholders and should not enable enforcement until defined."
+        },
+        "takeProfit": {
+          "enabled": true,
+          "levels": [
+            {
+              "index": 1,
+              "triggerPercent": 0.85,
+              "closePercent": 8,
+              "enabled": true
+            },
+            {
+              "index": 2,
+              "triggerPercent": 2.15,
+              "closePercent": 21,
+              "enabled": true
+            },
+            {
+              "index": 3,
+              "triggerPercent": 3.84,
+              "closePercent": 23,
+              "enabled": true
+            },
+            {
+              "index": 4,
+              "triggerPercent": 6.48,
+              "closePercent": 24,
+              "enabled": true
+            },
+            {
+              "index": 5,
+              "triggerPercent": 9.5,
+              "closePercent": 11,
+              "enabled": true
+            },
+            {
+              "index": 6,
+              "triggerPercent": 18.01,
+              "closePercent": 13,
+              "enabled": true
+            }
+          ],
+          "notes": "MDX-derived balanced profile take-profit ladder is the runtime source of truth for Bot1."
+        },
+        "stopLoss": {
+          "enabled": true,
+          "triggerPercent": 5,
+          "notes": "MDX-derived balanced profile stop-loss is the runtime source of truth for Bot1."
+        },
+        "breakEven": {
+          "enabled": true,
+          "triggerPercent": 2.15,
+          "notes": "MDX-derived balanced profile break-even trigger is the runtime source of truth for Bot1.",
+          "sourceRule": "slToBeTrigger=TP2"
+        },
+        "dca": {
+          "enabled": false,
+          "mode": "levels",
+          "maxAdds": 0,
+          "levels": [],
+          "notes": "DCA is strategically important but intentionally scaffolded only in Sprint 3. Strategy values to be defined later."
+        },
+        "storage": {
+          "databasePath": "./data/s2.sqlite"
+        },
+        "logging": {
+          "level": "info"
+        },
+        "s3": {
+          "enabled": false,
+          "klineInterval": "60",
+          "klineLookback": 20,
+          "htfInterval": "240",
+          "htfLookback": 20,
+          "winLossStreakLookback": 10,
+          "weights": {
+            "rsi": 0.25,
+            "vwap": 0.25,
+            "volumeSpike": 0.2,
+            "htfTrend": 0.2,
+            "winLossStreak": 0.1,
+            "supportResistance": 0
+          },
+          "notes": "Shadow-mode scoring only. No execution changes. supportResistance is stubbed at neutral weight 0 in v1."
+        },
+        "configVersion": "1.0.0",
+        "priceMonitoring": {
+          "enabled": true,
+          "logEveryTick": true,
+          "samplingIntervalMs": 0,
+          "notes": "samplingIntervalMs can be raised later to reduce storage volume for longer-running deployments."
+        }
+      },
+      "validation": {
+        "ok": false,
+        "safeMode": true,
+        "errors": [
+          {
+            "severity": "error",
+            "path": "settings.trading.enabled",
+            "message": "Trading cannot be enabled while TP/SL/BE placeholder zero values exist"
+          }
+        ],
+        "warnings": [],
+        "issues": [
+          {
+            "severity": "error",
+            "path": "settings.trading.enabled",
+            "message": "Trading cannot be enabled while TP/SL/BE placeholder zero values exist"
+          }
+        ]
+      },
+      "mdx": {
+        "enabled": true,
+        "profile": "balanced",
+        "sourcePath": "/home/ubuntu/.openclaw/workspace/Q_S2/mdx/Bot1.source.json",
+        "warnings": [
+          "slType is metadata-only in D3 and not runtime-mapped: ATR",
+          "slValue is metadata-only in D3 and not runtime-mapped"
+        ],
+        "metadata": {
+          "signalBotSourceMeta": {
+            "optimizedPeriod": "90 Days",
+            "exchange": "Bitget",
+            "timeframe": "95m",
+            "signalSetting": 4,
+            "baseline": "TMA",
+            "baselineValue": 26,
+            "slType": "ATR",
+            "slValue": 3
+          },
+          "sourcePerformanceMeta": {
+            "performance30d": 6.95,
+            "performance90d": 133.77,
+            "performance180d": null,
+            "performance360d": null,
+            "winrate": 78.05,
+            "profitFactor": 3.008
+          },
+          "profilePerformanceMeta": {
+            "tradeCount": 41,
+            "winrate": 78.05,
+            "netProfit": 791.36,
+            "maxDrawdown": -35,
+            "avgTradeProfit": 19.3
+          }
+        }
+      }
+    }
+  },
+  {
+    "botId": "Bot2",
+    "symbol": "NEARUSDT",
+    "enabled": true,
+    "mdxProfile": "aggressive",
+    "dcaEnabled": true,
+    "settings": {
+      "bot": {
+        "botId": "Bot2",
+        "enabled": true,
+        "symbol": "NEARUSDT",
+        "settingsRef": "./settings.json",
+        "credentialRef": {
+          "apiKeyEnv": "S2_BOT2_API_KEY",
+          "apiSecretEnv": "S2_BOT2_API_SECRET"
+        },
+        "mdxSourceRef": "../mdx/Bot2.source.json",
+        "mdxProfile": "aggressive",
+        "dcaPolicy": {
+          "enabled": true
+        },
+        "notes": "Active validation bot with MDX-derived runtime settings; NEAR aligned to aggressive profile"
+      },
+      "symbol": "NEARUSDT",
+      "settingsPath": "/home/ubuntu/.openclaw/workspace/Q_S2/config/settings.json",
+      "settings": {
+        "environment": {
+          "mode": "testnet",
+          "exchange": "bybit",
+          "marketType": "usdt_perpetual"
+        },
+        "trading": {
+          "enabled": true,
+          "defaultSymbol": "STXUSDT",
+          "allowedSymbols": [
+            "STXUSDT",
+            "NEARUSDT",
+            "PAXGUSDT",
+            "CRVUSDT",
+            "WIFUSDT",
+            "IPUSDT",
+            "FLOKIUSDT",
+            "PUMPFUNUSDT"
+          ],
+          "supportedSignals": [
+            "ENTER_LONG",
+            "EXIT_LONG",
+            "ENTER_SHORT",
+            "EXIT_SHORT"
+          ],
+          "notes": "Execution allowlist expanded to support the full multi-bot symbol set; actual live trading is still controlled by per-bot enabled state in bots.json."
+        },
+        "positionSizing": {
+          "mode": "account_percent",
+          "accountPercent": 10,
+          "leverage": 6,
+          "notes": "Cautious live validation baseline: use 10% of account until all bots are proven operationally."
+        },
+        "riskControls": {
+          "maxAccountPercent": 50,
+          "maxLeverage": 10,
+          "allowExitSignalsAsSafety": true,
+          "killSwitch": false,
+          "duplicateSignalWindowSeconds": 0,
+          "staleSignalThresholdSeconds": 0,
+          "notes": "Duplicate/stale signal controls are scaffolded here for later enforcement. Zero values are placeholders and should not enable enforcement until defined."
+        },
+        "takeProfit": {
+          "enabled": true,
+          "levels": [
+            {
+              "index": 1,
+              "triggerPercent": 4.87,
+              "closePercent": 8,
+              "enabled": true
+            },
+            {
+              "index": 2,
+              "triggerPercent": 5.44,
+              "closePercent": 28,
+              "enabled": true
+            },
+            {
+              "index": 3,
+              "triggerPercent": 7.18,
+              "closePercent": 11,
+              "enabled": true
+            },
+            {
+              "index": 4,
+              "triggerPercent": 10.96,
+              "closePercent": 23,
+              "enabled": true
+            },
+            {
+              "index": 5,
+              "triggerPercent": 16.23,
+              "closePercent": 20,
+              "enabled": true
+            },
+            {
+              "index": 6,
+              "triggerPercent": 24.03,
+              "closePercent": 10,
+              "enabled": true
+            }
+          ],
+          "notes": "MDX-derived aggressive profile take-profit ladder is the runtime source of truth for Bot2."
+        },
+        "stopLoss": {
+          "enabled": true,
+          "triggerPercent": 6,
+          "notes": "MDX-derived aggressive profile stop-loss is the runtime source of truth for Bot2."
+        },
+        "breakEven": {
+          "enabled": true,
+          "triggerPercent": 4.87,
+          "notes": "MDX-derived aggressive profile break-even trigger is the runtime source of truth for Bot2.",
+          "sourceRule": "slToBeTrigger=TP1"
+        },
+        "dca": {
+          "enabled": false,
+          "mode": "levels",
+          "maxAdds": 0,
+          "levels": [],
+          "notes": "DCA is strategically important but intentionally scaffolded only in Sprint 3. Strategy values to be defined later."
+        },
+        "storage": {
+          "databasePath": "./data/s2.sqlite"
+        },
+        "logging": {
+          "level": "info"
+        },
+        "s3": {
+          "enabled": false,
+          "klineInterval": "60",
+          "klineLookback": 20,
+          "htfInterval": "240",
+          "htfLookback": 20,
+          "winLossStreakLookback": 10,
+          "weights": {
+            "rsi": 0.25,
+            "vwap": 0.25,
+            "volumeSpike": 0.2,
+            "htfTrend": 0.2,
+            "winLossStreak": 0.1,
+            "supportResistance": 0
+          },
+          "notes": "Shadow-mode scoring only. No execution changes. supportResistance is stubbed at neutral weight 0 in v1."
+        },
+        "configVersion": "1.0.0",
+        "priceMonitoring": {
+          "enabled": true,
+          "logEveryTick": true,
+          "samplingIntervalMs": 0,
+          "notes": "samplingIntervalMs can be raised later to reduce storage volume for longer-running deployments."
+        }
+      },
+      "validation": {
+        "ok": false,
+        "safeMode": true,
+        "errors": [
+          {
+            "severity": "error",
+            "path": "settings.trading.enabled",
+            "message": "Trading cannot be enabled while TP/SL/BE placeholder zero values exist"
+          }
+        ],
+        "warnings": [],
+        "issues": [
+          {
+            "severity": "error",
+            "path": "settings.trading.enabled",
+            "message": "Trading cannot be enabled while TP/SL/BE placeholder zero values exist"
+          }
+        ]
+      },
+      "mdx": {
+        "enabled": true,
+        "profile": "aggressive",
+        "sourcePath": "/home/ubuntu/.openclaw/workspace/Q_S2/mdx/Bot2.source.json",
+        "warnings": [
+          "slType is metadata-only in D3 and not runtime-mapped: ATR",
+          "slValue is metadata-only in D3 and not runtime-mapped"
+        ],
+        "metadata": {
+          "signalBotSourceMeta": {
+            "optimizedPeriod": "2026-04-08 refresh",
+            "exchange": "Bitget",
+            "timeframe": "150m",
+            "signalSetting": 4,
+            "baseline": "VWMA",
+            "baselineValue": 12,
+            "slType": "ATR",
+            "slValue": 3.5
+          },
+          "sourcePerformanceMeta": {
+            "performance30d": 18.31,
+            "performance90d": 46.76,
+            "performance180d": null,
+            "performance360d": null,
+            "winrate": 78.72,
+            "profitFactor": null
+          },
+          "profilePerformanceMeta": {
+            "tradeCount": 47,
+            "winrate": 72.34,
+            "netProfit": 4667.83,
+            "maxDrawdown": -52.96,
+            "avgTradeProfit": 99.32
+          }
+        }
+      }
+    }
+  },
+  {
+    "botId": "Bot3",
+    "symbol": "PAXGUSDT",
+    "enabled": true,
+    "mdxProfile": "balanced",
+    "dcaEnabled": false,
+    "settings": {
+      "bot": {
+        "botId": "Bot3",
+        "enabled": true,
+        "symbol": "PAXGUSDT",
+        "settingsRef": "./settings.json",
+        "credentialRef": {
+          "apiKeyEnv": "S2_BOT3_API_KEY",
+          "apiSecretEnv": "S2_BOT3_API_SECRET"
+        },
+        "mdxSourceRef": "../mdx/Bot3.source.json",
+        "mdxProfile": "balanced",
+        "dcaPolicy": {
+          "enabled": false
+        },
+        "notes": "Prepared for later activation; disabled by default"
+      },
+      "symbol": "PAXGUSDT",
+      "settingsPath": "/home/ubuntu/.openclaw/workspace/Q_S2/config/settings.json",
+      "settings": {
+        "environment": {
+          "mode": "testnet",
+          "exchange": "bybit",
+          "marketType": "usdt_perpetual"
+        },
+        "trading": {
+          "enabled": true,
+          "defaultSymbol": "STXUSDT",
+          "allowedSymbols": [
+            "STXUSDT",
+            "NEARUSDT",
+            "PAXGUSDT",
+            "CRVUSDT",
+            "WIFUSDT",
+            "IPUSDT",
+            "FLOKIUSDT",
+            "PUMPFUNUSDT"
+          ],
+          "supportedSignals": [
+            "ENTER_LONG",
+            "EXIT_LONG",
+            "ENTER_SHORT",
+            "EXIT_SHORT"
+          ],
+          "notes": "Execution allowlist expanded to support the full multi-bot symbol set; actual live trading is still controlled by per-bot enabled state in bots.json."
+        },
+        "positionSizing": {
+          "mode": "account_percent",
+          "accountPercent": 10,
+          "leverage": 8,
+          "notes": "Cautious live validation baseline: use 10% of account until all bots are proven operationally."
+        },
+        "riskControls": {
+          "maxAccountPercent": 50,
+          "maxLeverage": 10,
+          "allowExitSignalsAsSafety": true,
+          "killSwitch": false,
+          "duplicateSignalWindowSeconds": 0,
+          "staleSignalThresholdSeconds": 0,
+          "notes": "Duplicate/stale signal controls are scaffolded here for later enforcement. Zero values are placeholders and should not enable enforcement until defined."
+        },
+        "takeProfit": {
+          "enabled": true,
+          "levels": [
+            {
+              "index": 1,
+              "triggerPercent": 0.37,
+              "closePercent": 8,
+              "enabled": true
+            },
+            {
+              "index": 2,
+              "triggerPercent": 0.91,
+              "closePercent": 21,
+              "enabled": true
+            },
+            {
+              "index": 3,
+              "triggerPercent": 1.73,
+              "closePercent": 21,
+              "enabled": true
+            },
+            {
+              "index": 4,
+              "triggerPercent": 3.09,
+              "closePercent": 21,
+              "enabled": true
+            },
+            {
+              "index": 5,
+              "triggerPercent": 4.78,
+              "closePercent": 13,
+              "enabled": true
+            },
+            {
+              "index": 6,
+              "triggerPercent": 9.6,
+              "closePercent": 16,
+              "enabled": true
+            }
+          ],
+          "notes": "MDX-derived balanced profile take-profit ladder is the runtime source of truth for Bot3."
+        },
+        "stopLoss": {
+          "enabled": true,
+          "triggerPercent": 3,
+          "notes": "MDX-derived balanced profile stop-loss is the runtime source of truth for Bot3."
+        },
+        "breakEven": {
+          "enabled": true,
+          "triggerPercent": 1.73,
+          "notes": "MDX-derived balanced profile break-even trigger is the runtime source of truth for Bot3.",
+          "sourceRule": "slToBeTrigger=TP3"
+        },
+        "dca": {
+          "enabled": false,
+          "mode": "levels",
+          "maxAdds": 0,
+          "levels": [],
+          "notes": "DCA is strategically important but intentionally scaffolded only in Sprint 3. Strategy values to be defined later."
+        },
+        "storage": {
+          "databasePath": "./data/s2.sqlite"
+        },
+        "logging": {
+          "level": "info"
+        },
+        "s3": {
+          "enabled": false,
+          "klineInterval": "60",
+          "klineLookback": 20,
+          "htfInterval": "240",
+          "htfLookback": 20,
+          "winLossStreakLookback": 10,
+          "weights": {
+            "rsi": 0.25,
+            "vwap": 0.25,
+            "volumeSpike": 0.2,
+            "htfTrend": 0.2,
+            "winLossStreak": 0.1,
+            "supportResistance": 0
+          },
+          "notes": "Shadow-mode scoring only. No execution changes. supportResistance is stubbed at neutral weight 0 in v1."
+        },
+        "configVersion": "1.0.0",
+        "priceMonitoring": {
+          "enabled": true,
+          "logEveryTick": true,
+          "samplingIntervalMs": 0,
+          "notes": "samplingIntervalMs can be raised later to reduce storage volume for longer-running deployments."
+        }
+      },
+      "validation": {
+        "ok": false,
+        "safeMode": true,
+        "errors": [
+          {
+            "severity": "error",
+            "path": "settings.trading.enabled",
+            "message": "Trading cannot be enabled while TP/SL/BE placeholder zero values exist"
+          }
+        ],
+        "warnings": [],
+        "issues": [
+          {
+            "severity": "error",
+            "path": "settings.trading.enabled",
+            "message": "Trading cannot be enabled while TP/SL/BE placeholder zero values exist"
+          }
+        ]
+      },
+      "mdx": {
+        "enabled": true,
+        "profile": "balanced",
+        "sourcePath": "/home/ubuntu/.openclaw/workspace/Q_S2/mdx/Bot3.source.json",
+        "warnings": [
+          "slType is metadata-only in D3 and not runtime-mapped: ATR",
+          "slValue is metadata-only in D3 and not runtime-mapped"
+        ],
+        "metadata": {
+          "signalBotSourceMeta": {
+            "optimizedPeriod": "2026-04-08 refresh",
+            "exchange": "Bybit",
+            "timeframe": "130m",
+            "signalSetting": 4,
+            "baseline": "EMA",
+            "baselineValue": 34,
+            "slType": "ATR",
+            "slValue": 6.2
+          },
+          "sourcePerformanceMeta": {
+            "performance30d": 12.39,
+            "performance90d": 85.07,
+            "performance180d": null,
+            "performance360d": null,
+            "winrate": 60.42,
+            "profitFactor": null
+          },
+          "profilePerformanceMeta": {
+            "tradeCount": 48,
+            "winrate": 60.42,
+            "netProfit": 1045.47,
+            "maxDrawdown": null,
+            "avgTradeProfit": 21.78
+          }
+        }
+      }
+    }
+  },
+  {
+    "botId": "Bot4",
+    "symbol": "CRVUSDT",
+    "enabled": false,
+    "mdxProfile": "balanced",
+    "dcaEnabled": false,
+    "settings": {
+      "bot": {
+        "botId": "Bot4",
+        "enabled": false,
+        "symbol": "CRVUSDT",
+        "settingsRef": "./settings.json",
+        "credentialRef": {
+          "apiKeyEnv": "S2_BOT4_API_KEY",
+          "apiSecretEnv": "S2_BOT4_API_SECRET"
+        },
+        "mdxSourceRef": "../mdx/Bot4.source.json",
+        "mdxProfile": "balanced",
+        "dcaPolicy": {
+          "enabled": false
+        },
+        "notes": "Active validation bot with live staged-entry submission proof"
+      },
+      "symbol": "CRVUSDT",
+      "settingsPath": "/home/ubuntu/.openclaw/workspace/Q_S2/config/settings.json",
+      "settings": {
+        "environment": {
+          "mode": "testnet",
+          "exchange": "bybit",
+          "marketType": "usdt_perpetual"
+        },
+        "trading": {
+          "enabled": true,
+          "defaultSymbol": "STXUSDT",
+          "allowedSymbols": [
+            "STXUSDT",
+            "NEARUSDT",
+            "PAXGUSDT",
+            "CRVUSDT",
+            "WIFUSDT",
+            "IPUSDT",
+            "FLOKIUSDT",
+            "PUMPFUNUSDT"
+          ],
+          "supportedSignals": [
+            "ENTER_LONG",
+            "EXIT_LONG",
+            "ENTER_SHORT",
+            "EXIT_SHORT"
+          ],
+          "notes": "Execution allowlist expanded to support the full multi-bot symbol set; actual live trading is still controlled by per-bot enabled state in bots.json."
+        },
+        "positionSizing": {
+          "mode": "account_percent",
+          "accountPercent": 10,
+          "leverage": 5,
+          "notes": "Cautious live validation baseline: use 10% of account until all bots are proven operationally."
+        },
+        "riskControls": {
+          "maxAccountPercent": 50,
+          "maxLeverage": 10,
+          "allowExitSignalsAsSafety": true,
+          "killSwitch": false,
+          "duplicateSignalWindowSeconds": 0,
+          "staleSignalThresholdSeconds": 0,
+          "notes": "Duplicate/stale signal controls are scaffolded here for later enforcement. Zero values are placeholders and should not enable enforcement until defined."
+        },
+        "takeProfit": {
+          "enabled": true,
+          "levels": [
+            {
+              "index": 1,
+              "triggerPercent": 3.24,
+              "closePercent": 7,
+              "enabled": true
+            },
+            {
+              "index": 2,
+              "triggerPercent": 6.08,
+              "closePercent": 38,
+              "enabled": true
+            },
+            {
+              "index": 3,
+              "triggerPercent": 8.44,
+              "closePercent": 19,
+              "enabled": true
+            },
+            {
+              "index": 4,
+              "triggerPercent": 10.99,
+              "closePercent": 18,
+              "enabled": true
+            },
+            {
+              "index": 5,
+              "triggerPercent": 13.87,
+              "closePercent": 8,
+              "enabled": true
+            },
+            {
+              "index": 6,
+              "triggerPercent": 20.47,
+              "closePercent": 10,
+              "enabled": true
+            }
+          ],
+          "notes": "MDX-derived balanced profile take-profit ladder is the runtime source of truth for Bot4."
+        },
+        "stopLoss": {
+          "enabled": true,
+          "triggerPercent": 6,
+          "notes": "MDX-derived balanced profile stop-loss is the runtime source of truth for Bot4."
+        },
+        "breakEven": {
+          "enabled": true,
+          "triggerPercent": 3.24,
+          "notes": "MDX-derived balanced profile break-even trigger is the runtime source of truth for Bot4.",
+          "sourceRule": "slToBeTrigger=TP1"
+        },
+        "dca": {
+          "enabled": false,
+          "mode": "levels",
+          "maxAdds": 0,
+          "levels": [],
+          "notes": "DCA is strategically important but intentionally scaffolded only in Sprint 3. Strategy values to be defined later."
+        },
+        "storage": {
+          "databasePath": "./data/s2.sqlite"
+        },
+        "logging": {
+          "level": "info"
+        },
+        "s3": {
+          "enabled": false,
+          "klineInterval": "60",
+          "klineLookback": 20,
+          "htfInterval": "240",
+          "htfLookback": 20,
+          "winLossStreakLookback": 10,
+          "weights": {
+            "rsi": 0.25,
+            "vwap": 0.25,
+            "volumeSpike": 0.2,
+            "htfTrend": 0.2,
+            "winLossStreak": 0.1,
+            "supportResistance": 0
+          },
+          "notes": "Shadow-mode scoring only. No execution changes. supportResistance is stubbed at neutral weight 0 in v1."
+        },
+        "configVersion": "1.0.0",
+        "priceMonitoring": {
+          "enabled": true,
+          "logEveryTick": true,
+          "samplingIntervalMs": 0,
+          "notes": "samplingIntervalMs can be raised later to reduce storage volume for longer-running deployments."
+        }
+      },
+      "validation": {
+        "ok": false,
+        "safeMode": true,
+        "errors": [
+          {
+            "severity": "error",
+            "path": "settings.trading.enabled",
+            "message": "Trading cannot be enabled while TP/SL/BE placeholder zero values exist"
+          }
+        ],
+        "warnings": [],
+        "issues": [
+          {
+            "severity": "error",
+            "path": "settings.trading.enabled",
+            "message": "Trading cannot be enabled while TP/SL/BE placeholder zero values exist"
+          }
+        ]
+      },
+      "mdx": {
+        "enabled": true,
+        "profile": "balanced",
+        "sourcePath": "/home/ubuntu/.openclaw/workspace/Q_S2/mdx/Bot4.source.json",
+        "warnings": [
+          "slType is metadata-only in D3 and not runtime-mapped: ATR",
+          "slValue is metadata-only in D3 and not runtime-mapped"
+        ],
+        "metadata": {
+          "signalBotSourceMeta": {
+            "optimizedPeriod": "2026-04-08 refresh",
+            "exchange": "Bybit",
+            "timeframe": "160m",
+            "signalSetting": 5,
+            "baseline": "EMA",
+            "baselineValue": 27,
+            "slType": "ATR",
+            "slValue": 3
+          },
+          "sourcePerformanceMeta": {
+            "performance30d": -5.72,
+            "performance90d": 100.52,
+            "performance180d": null,
+            "performance360d": null,
+            "winrate": 76.92,
+            "profitFactor": null
+          },
+          "profilePerformanceMeta": {
+            "tradeCount": 26,
+            "winrate": 76.92,
+            "netProfit": 329.46,
+            "maxDrawdown": -34.77,
+            "avgTradeProfit": 12.67
+          }
+        }
+      }
+    }
+  },
+  {
+    "botId": "Bot5",
+    "symbol": "WIFUSDT",
+    "enabled": true,
+    "mdxProfile": "balanced",
+    "dcaEnabled": false,
+    "settings": {
+      "bot": {
+        "botId": "Bot5",
+        "enabled": true,
+        "symbol": "WIFUSDT",
+        "settingsRef": "./settings.json",
+        "credentialRef": {
+          "apiKeyEnv": "S2_BOT5_API_KEY",
+          "apiSecretEnv": "S2_BOT5_API_SECRET"
+        },
+        "mdxSourceRef": "../mdx/Bot5.source.json",
+        "mdxProfile": "balanced",
+        "dcaPolicy": {
+          "enabled": false
+        },
+        "notes": "Prepared for later activation; disabled by default"
+      },
+      "symbol": "WIFUSDT",
+      "settingsPath": "/home/ubuntu/.openclaw/workspace/Q_S2/config/settings.json",
+      "settings": {
+        "environment": {
+          "mode": "testnet",
+          "exchange": "bybit",
+          "marketType": "usdt_perpetual"
+        },
+        "trading": {
+          "enabled": true,
+          "defaultSymbol": "STXUSDT",
+          "allowedSymbols": [
+            "STXUSDT",
+            "NEARUSDT",
+            "PAXGUSDT",
+            "CRVUSDT",
+            "WIFUSDT",
+            "IPUSDT",
+            "FLOKIUSDT",
+            "PUMPFUNUSDT"
+          ],
+          "supportedSignals": [
+            "ENTER_LONG",
+            "EXIT_LONG",
+            "ENTER_SHORT",
+            "EXIT_SHORT"
+          ],
+          "notes": "Execution allowlist expanded to support the full multi-bot symbol set; actual live trading is still controlled by per-bot enabled state in bots.json."
+        },
+        "positionSizing": {
+          "mode": "account_percent",
+          "accountPercent": 10,
+          "leverage": 4,
+          "notes": "Cautious live validation baseline: use 10% of account until all bots are proven operationally."
+        },
+        "riskControls": {
+          "maxAccountPercent": 50,
+          "maxLeverage": 10,
+          "allowExitSignalsAsSafety": true,
+          "killSwitch": false,
+          "duplicateSignalWindowSeconds": 0,
+          "staleSignalThresholdSeconds": 0,
+          "notes": "Duplicate/stale signal controls are scaffolded here for later enforcement. Zero values are placeholders and should not enable enforcement until defined."
+        },
+        "takeProfit": {
+          "enabled": true,
+          "levels": [
+            {
+              "index": 1,
+              "triggerPercent": 1.97,
+              "closePercent": 8,
+              "enabled": true
+            },
+            {
+              "index": 2,
+              "triggerPercent": 5.67,
+              "closePercent": 27,
+              "enabled": true
+            },
+            {
+              "index": 3,
+              "triggerPercent": 9.26,
+              "closePercent": 25,
+              "enabled": true
+            },
+            {
+              "index": 4,
+              "triggerPercent": 12.32,
+              "closePercent": 24,
+              "enabled": true
+            },
+            {
+              "index": 5,
+              "triggerPercent": 16.91,
+              "closePercent": 8,
+              "enabled": true
+            },
+            {
+              "index": 6,
+              "triggerPercent": 26.92,
+              "closePercent": 8,
+              "enabled": true
+            }
+          ],
+          "notes": "MDX-derived balanced profile take-profit ladder is the runtime source of truth for Bot5."
+        },
+        "stopLoss": {
+          "enabled": true,
+          "triggerPercent": 2,
+          "notes": "MDX-derived balanced profile stop-loss is the runtime source of truth for Bot5."
+        },
+        "breakEven": {
+          "enabled": true,
+          "triggerPercent": 9.26,
+          "notes": "MDX-derived balanced profile break-even trigger is the runtime source of truth for Bot5.",
+          "sourceRule": "slToBeTrigger=TP3"
+        },
+        "dca": {
+          "enabled": false,
+          "mode": "levels",
+          "maxAdds": 0,
+          "levels": [],
+          "notes": "DCA is strategically important but intentionally scaffolded only in Sprint 3. Strategy values to be defined later."
+        },
+        "storage": {
+          "databasePath": "./data/s2.sqlite"
+        },
+        "logging": {
+          "level": "info"
+        },
+        "s3": {
+          "enabled": false,
+          "klineInterval": "60",
+          "klineLookback": 20,
+          "htfInterval": "240",
+          "htfLookback": 20,
+          "winLossStreakLookback": 10,
+          "weights": {
+            "rsi": 0.25,
+            "vwap": 0.25,
+            "volumeSpike": 0.2,
+            "htfTrend": 0.2,
+            "winLossStreak": 0.1,
+            "supportResistance": 0
+          },
+          "notes": "Shadow-mode scoring only. No execution changes. supportResistance is stubbed at neutral weight 0 in v1."
+        },
+        "configVersion": "1.0.0",
+        "priceMonitoring": {
+          "enabled": true,
+          "logEveryTick": true,
+          "samplingIntervalMs": 0,
+          "notes": "samplingIntervalMs can be raised later to reduce storage volume for longer-running deployments."
+        }
+      },
+      "validation": {
+        "ok": false,
+        "safeMode": true,
+        "errors": [
+          {
+            "severity": "error",
+            "path": "settings.trading.enabled",
+            "message": "Trading cannot be enabled while TP/SL/BE placeholder zero values exist"
+          }
+        ],
+        "warnings": [],
+        "issues": [
+          {
+            "severity": "error",
+            "path": "settings.trading.enabled",
+            "message": "Trading cannot be enabled while TP/SL/BE placeholder zero values exist"
+          }
+        ]
+      },
+      "mdx": {
+        "enabled": true,
+        "profile": "balanced",
+        "sourcePath": "/home/ubuntu/.openclaw/workspace/Q_S2/mdx/Bot5.source.json",
+        "warnings": [
+          "slType is metadata-only in D3 and not runtime-mapped: ATR",
+          "slValue is metadata-only in D3 and not runtime-mapped"
+        ],
+        "metadata": {
+          "signalBotSourceMeta": {
+            "optimizedPeriod": "2026-04-08 refresh",
+            "exchange": "Bitget",
+            "timeframe": "150m",
+            "signalSetting": 5,
+            "baseline": "SMA",
+            "baselineValue": 30,
+            "slType": "ATR",
+            "slValue": 3.2
+          },
+          "sourcePerformanceMeta": {
+            "performance30d": 17.71,
+            "performance90d": 308.61,
+            "performance180d": null,
+            "performance360d": null,
+            "winrate": 46.67,
+            "profitFactor": null
+          },
+          "profilePerformanceMeta": {
+            "tradeCount": 30,
+            "winrate": 46.67,
+            "netProfit": 650.95,
+            "maxDrawdown": -25.72,
+            "avgTradeProfit": 21.7
+          }
+        }
+      }
+    }
+  },
+  {
+    "botId": "Bot6",
+    "symbol": "IPUSDT",
+    "enabled": true,
+    "mdxProfile": "balanced",
+    "dcaEnabled": false,
+    "settings": {
+      "bot": {
+        "botId": "Bot6",
+        "enabled": true,
+        "symbol": "IPUSDT",
+        "settingsRef": "./settings.json",
+        "credentialRef": {
+          "apiKeyEnv": "S2_BOT6_API_KEY",
+          "apiSecretEnv": "S2_BOT6_API_SECRET"
+        },
+        "mdxSourceRef": "../mdx/Bot6.source.json",
+        "mdxProfile": "balanced",
+        "dcaPolicy": {
+          "enabled": false
+        },
+        "notes": "Prepared for later activation; disabled by default"
+      },
+      "symbol": "IPUSDT",
+      "settingsPath": "/home/ubuntu/.openclaw/workspace/Q_S2/config/settings.json",
+      "settings": {
+        "environment": {
+          "mode": "testnet",
+          "exchange": "bybit",
+          "marketType": "usdt_perpetual"
+        },
+        "trading": {
+          "enabled": true,
+          "defaultSymbol": "STXUSDT",
+          "allowedSymbols": [
+            "STXUSDT",
+            "NEARUSDT",
+            "PAXGUSDT",
+            "CRVUSDT",
+            "WIFUSDT",
+            "IPUSDT",
+            "FLOKIUSDT",
+            "PUMPFUNUSDT"
+          ],
+          "supportedSignals": [
+            "ENTER_LONG",
+            "EXIT_LONG",
+            "ENTER_SHORT",
+            "EXIT_SHORT"
+          ],
+          "notes": "Execution allowlist expanded to support the full multi-bot symbol set; actual live trading is still controlled by per-bot enabled state in bots.json."
+        },
+        "positionSizing": {
+          "mode": "account_percent",
+          "accountPercent": 10,
+          "leverage": 3,
+          "notes": "Cautious live validation baseline: use 10% of account until all bots are proven operationally."
+        },
+        "riskControls": {
+          "maxAccountPercent": 50,
+          "maxLeverage": 10,
+          "allowExitSignalsAsSafety": true,
+          "killSwitch": false,
+          "duplicateSignalWindowSeconds": 0,
+          "staleSignalThresholdSeconds": 0,
+          "notes": "Duplicate/stale signal controls are scaffolded here for later enforcement. Zero values are placeholders and should not enable enforcement until defined."
+        },
+        "takeProfit": {
+          "enabled": true,
+          "levels": [
+            {
+              "index": 1,
+              "triggerPercent": 3.43,
+              "closePercent": 8,
+              "enabled": true
+            },
+            {
+              "index": 2,
+              "triggerPercent": 5.26,
+              "closePercent": 21,
+              "enabled": true
+            },
+            {
+              "index": 3,
+              "triggerPercent": 9.33,
+              "closePercent": 21,
+              "enabled": true
+            },
+            {
+              "index": 4,
+              "triggerPercent": 14.57,
+              "closePercent": 21,
+              "enabled": true
+            },
+            {
+              "index": 5,
+              "triggerPercent": 31.29,
+              "closePercent": 13,
+              "enabled": true
+            },
+            {
+              "index": 6,
+              "triggerPercent": 52.88,
+              "closePercent": 16,
+              "enabled": true
+            }
+          ],
+          "notes": "MDX-derived balanced profile take-profit ladder is the runtime source of truth for Bot6."
+        },
+        "stopLoss": {
+          "enabled": true,
+          "triggerPercent": 3,
+          "notes": "MDX-derived balanced profile stop-loss is the runtime source of truth for Bot6."
+        },
+        "breakEven": {
+          "enabled": true,
+          "triggerPercent": 3.43,
+          "notes": "MDX-derived balanced profile break-even trigger is the runtime source of truth for Bot6.",
+          "sourceRule": "slToBeTrigger=TP1"
+        },
+        "dca": {
+          "enabled": false,
+          "mode": "levels",
+          "maxAdds": 0,
+          "levels": [],
+          "notes": "DCA is strategically important but intentionally scaffolded only in Sprint 3. Strategy values to be defined later."
+        },
+        "storage": {
+          "databasePath": "./data/s2.sqlite"
+        },
+        "logging": {
+          "level": "info"
+        },
+        "s3": {
+          "enabled": false,
+          "klineInterval": "60",
+          "klineLookback": 20,
+          "htfInterval": "240",
+          "htfLookback": 20,
+          "winLossStreakLookback": 10,
+          "weights": {
+            "rsi": 0.25,
+            "vwap": 0.25,
+            "volumeSpike": 0.2,
+            "htfTrend": 0.2,
+            "winLossStreak": 0.1,
+            "supportResistance": 0
+          },
+          "notes": "Shadow-mode scoring only. No execution changes. supportResistance is stubbed at neutral weight 0 in v1."
+        },
+        "configVersion": "1.0.0",
+        "priceMonitoring": {
+          "enabled": true,
+          "logEveryTick": true,
+          "samplingIntervalMs": 0,
+          "notes": "samplingIntervalMs can be raised later to reduce storage volume for longer-running deployments."
+        }
+      },
+      "validation": {
+        "ok": false,
+        "safeMode": true,
+        "errors": [
+          {
+            "severity": "error",
+            "path": "settings.trading.enabled",
+            "message": "Trading cannot be enabled while TP/SL/BE placeholder zero values exist"
+          }
+        ],
+        "warnings": [],
+        "issues": [
+          {
+            "severity": "error",
+            "path": "settings.trading.enabled",
+            "message": "Trading cannot be enabled while TP/SL/BE placeholder zero values exist"
+          }
+        ]
+      },
+      "mdx": {
+        "enabled": true,
+        "profile": "balanced",
+        "sourcePath": "/home/ubuntu/.openclaw/workspace/Q_S2/mdx/Bot6.source.json",
+        "warnings": [
+          "slType is metadata-only in D3 and not runtime-mapped: ATR",
+          "slValue is metadata-only in D3 and not runtime-mapped"
+        ],
+        "metadata": {
+          "signalBotSourceMeta": {
+            "optimizedPeriod": "2026-04-08 refresh",
+            "exchange": "Bybit",
+            "timeframe": "168m",
+            "signalSetting": 4,
+            "baseline": "TMA",
+            "baselineValue": 45,
+            "slType": "ATR",
+            "slValue": 5
+          },
+          "sourcePerformanceMeta": {
+            "performance30d": 11.44,
+            "performance90d": 25.5,
+            "performance180d": null,
+            "performance360d": null,
+            "winrate": 40,
+            "profitFactor": null
+          },
+          "profilePerformanceMeta": {
+            "tradeCount": 15,
+            "winrate": 40,
+            "netProfit": -0.5,
+            "maxDrawdown": -35.92,
+            "avgTradeProfit": -0.03
+          }
+        }
+      }
+    }
+  },
+  {
+    "botId": "Bot7",
+    "symbol": "FLOKIUSDT",
+    "enabled": true,
+    "mdxProfile": "balanced",
+    "dcaEnabled": false,
+    "settings": {
+      "bot": {
+        "botId": "Bot7",
+        "enabled": true,
+        "symbol": "FLOKIUSDT",
+        "settingsRef": "./settings.json",
+        "credentialRef": {
+          "apiKeyEnv": "S2_BOT7_API_KEY",
+          "apiSecretEnv": "S2_BOT7_API_SECRET"
+        },
+        "mdxSourceRef": "../mdx/Bot7.source.json",
+        "mdxProfile": "balanced",
+        "dcaPolicy": {
+          "enabled": false
+        },
+        "notes": "Prepared for later activation; disabled by default"
+      },
+      "symbol": "FLOKIUSDT",
+      "settingsPath": "/home/ubuntu/.openclaw/workspace/Q_S2/config/settings.json",
+      "settings": {
+        "environment": {
+          "mode": "testnet",
+          "exchange": "bybit",
+          "marketType": "usdt_perpetual"
+        },
+        "trading": {
+          "enabled": true,
+          "defaultSymbol": "STXUSDT",
+          "allowedSymbols": [
+            "STXUSDT",
+            "NEARUSDT",
+            "PAXGUSDT",
+            "CRVUSDT",
+            "WIFUSDT",
+            "IPUSDT",
+            "FLOKIUSDT",
+            "PUMPFUNUSDT"
+          ],
+          "supportedSignals": [
+            "ENTER_LONG",
+            "EXIT_LONG",
+            "ENTER_SHORT",
+            "EXIT_SHORT"
+          ],
+          "notes": "Execution allowlist expanded to support the full multi-bot symbol set; actual live trading is still controlled by per-bot enabled state in bots.json."
+        },
+        "positionSizing": {
+          "mode": "account_percent",
+          "accountPercent": 10,
+          "leverage": 3,
+          "notes": "Cautious live validation baseline: use 10% of account until all bots are proven operationally."
+        },
+        "riskControls": {
+          "maxAccountPercent": 50,
+          "maxLeverage": 10,
+          "allowExitSignalsAsSafety": true,
+          "killSwitch": false,
+          "duplicateSignalWindowSeconds": 0,
+          "staleSignalThresholdSeconds": 0,
+          "notes": "Duplicate/stale signal controls are scaffolded here for later enforcement. Zero values are placeholders and should not enable enforcement until defined."
+        },
+        "takeProfit": {
+          "enabled": true,
+          "levels": [
+            {
+              "index": 1,
+              "triggerPercent": 3.03,
+              "closePercent": 8,
+              "enabled": true
+            },
+            {
+              "index": 2,
+              "triggerPercent": 6.29,
+              "closePercent": 42,
+              "enabled": true
+            },
+            {
+              "index": 3,
+              "triggerPercent": 8.17,
+              "closePercent": 13,
+              "enabled": true
+            },
+            {
+              "index": 4,
+              "triggerPercent": 12.35,
+              "closePercent": 14,
+              "enabled": true
+            },
+            {
+              "index": 5,
+              "triggerPercent": 17.8,
+              "closePercent": 8,
+              "enabled": true
+            },
+            {
+              "index": 6,
+              "triggerPercent": 27.09,
+              "closePercent": 15,
+              "enabled": true
+            }
+          ],
+          "notes": "MDX-derived balanced profile take-profit ladder is the runtime source of truth for Bot7."
+        },
+        "stopLoss": {
+          "enabled": true,
+          "triggerPercent": 5,
+          "notes": "MDX-derived balanced profile stop-loss is the runtime source of truth for Bot7."
+        },
+        "breakEven": {
+          "enabled": true,
+          "triggerPercent": 6.29,
+          "notes": "MDX-derived balanced profile break-even trigger is the runtime source of truth for Bot7.",
+          "sourceRule": "slToBeTrigger=TP2"
+        },
+        "dca": {
+          "enabled": false,
+          "mode": "levels",
+          "maxAdds": 0,
+          "levels": [],
+          "notes": "DCA is strategically important but intentionally scaffolded only in Sprint 3. Strategy values to be defined later."
+        },
+        "storage": {
+          "databasePath": "./data/s2.sqlite"
+        },
+        "logging": {
+          "level": "info"
+        },
+        "s3": {
+          "enabled": false,
+          "klineInterval": "60",
+          "klineLookback": 20,
+          "htfInterval": "240",
+          "htfLookback": 20,
+          "winLossStreakLookback": 10,
+          "weights": {
+            "rsi": 0.25,
+            "vwap": 0.25,
+            "volumeSpike": 0.2,
+            "htfTrend": 0.2,
+            "winLossStreak": 0.1,
+            "supportResistance": 0
+          },
+          "notes": "Shadow-mode scoring only. No execution changes. supportResistance is stubbed at neutral weight 0 in v1."
+        },
+        "configVersion": "1.0.0",
+        "priceMonitoring": {
+          "enabled": true,
+          "logEveryTick": true,
+          "samplingIntervalMs": 0,
+          "notes": "samplingIntervalMs can be raised later to reduce storage volume for longer-running deployments."
+        }
+      },
+      "validation": {
+        "ok": false,
+        "safeMode": true,
+        "errors": [
+          {
+            "severity": "error",
+            "path": "settings.trading.enabled",
+            "message": "Trading cannot be enabled while TP/SL/BE placeholder zero values exist"
+          }
+        ],
+        "warnings": [],
+        "issues": [
+          {
+            "severity": "error",
+            "path": "settings.trading.enabled",
+            "message": "Trading cannot be enabled while TP/SL/BE placeholder zero values exist"
+          }
+        ]
+      },
+      "mdx": {
+        "enabled": true,
+        "profile": "balanced",
+        "sourcePath": "/home/ubuntu/.openclaw/workspace/Q_S2/mdx/Bot7.source.json",
+        "warnings": [
+          "slType is metadata-only in D3 and not runtime-mapped: ATR",
+          "slValue is metadata-only in D3 and not runtime-mapped"
+        ],
+        "metadata": {
+          "signalBotSourceMeta": {
+            "optimizedPeriod": "180 Days",
+            "exchange": "Bitget",
+            "timeframe": "175m",
+            "signalSetting": 5,
+            "baseline": "EMA",
+            "baselineValue": 18,
+            "slType": "ATR",
+            "slValue": 3.5
+          },
+          "sourcePerformanceMeta": {
+            "performance30d": 13.04,
+            "performance90d": 59.24,
+            "performance180d": 108.73,
+            "performance360d": null,
+            "winrate": 54.35,
+            "profitFactor": null
+          },
+          "profilePerformanceMeta": {
+            "tradeCount": 46,
+            "winrate": 54.35,
+            "netProfit": 607.61,
+            "maxDrawdown": -27.14,
+            "avgTradeProfit": 13.21
+          }
+        }
+      }
+    }
+  },
+  {
+    "botId": "Bot8",
+    "symbol": "PUMPFUNUSDT",
+    "enabled": true,
+    "mdxProfile": "balanced",
+    "dcaEnabled": false,
+    "settings": {
+      "bot": {
+        "botId": "Bot8",
+        "enabled": true,
+        "symbol": "PUMPFUNUSDT",
+        "settingsRef": "./settings.json",
+        "credentialRef": {
+          "apiKeyEnv": "S2_BOT8_API_KEY",
+          "apiSecretEnv": "S2_BOT8_API_SECRET"
+        },
+        "mdxSourceRef": "../mdx/Bot8.source.json",
+        "mdxProfile": "balanced",
+        "dcaPolicy": {
+          "enabled": false
+        },
+        "notes": "Prepared for later activation; disabled by default"
+      },
+      "symbol": "PUMPFUNUSDT",
+      "settingsPath": "/home/ubuntu/.openclaw/workspace/Q_S2/config/settings.json",
+      "settings": {
+        "environment": {
+          "mode": "testnet",
+          "exchange": "bybit",
+          "marketType": "usdt_perpetual"
+        },
+        "trading": {
+          "enabled": true,
+          "defaultSymbol": "STXUSDT",
+          "allowedSymbols": [
+            "STXUSDT",
+            "NEARUSDT",
+            "PAXGUSDT",
+            "CRVUSDT",
+            "WIFUSDT",
+            "IPUSDT",
+            "FLOKIUSDT",
+            "PUMPFUNUSDT"
+          ],
+          "supportedSignals": [
+            "ENTER_LONG",
+            "EXIT_LONG",
+            "ENTER_SHORT",
+            "EXIT_SHORT"
+          ],
+          "notes": "Execution allowlist expanded to support the full multi-bot symbol set; actual live trading is still controlled by per-bot enabled state in bots.json."
+        },
+        "positionSizing": {
+          "mode": "account_percent",
+          "accountPercent": 10,
+          "leverage": 3,
+          "notes": "Cautious live validation baseline: use 10% of account until all bots are proven operationally."
+        },
+        "riskControls": {
+          "maxAccountPercent": 50,
+          "maxLeverage": 10,
+          "allowExitSignalsAsSafety": true,
+          "killSwitch": false,
+          "duplicateSignalWindowSeconds": 0,
+          "staleSignalThresholdSeconds": 0,
+          "notes": "Duplicate/stale signal controls are scaffolded here for later enforcement. Zero values are placeholders and should not enable enforcement until defined."
+        },
+        "takeProfit": {
+          "enabled": true,
+          "levels": [
+            {
+              "index": 1,
+              "triggerPercent": 2.22,
+              "closePercent": 8,
+              "enabled": true
+            },
+            {
+              "index": 2,
+              "triggerPercent": 5.45,
+              "closePercent": 27,
+              "enabled": true
+            },
+            {
+              "index": 3,
+              "triggerPercent": 8.53,
+              "closePercent": 25,
+              "enabled": true
+            },
+            {
+              "index": 4,
+              "triggerPercent": 12.7,
+              "closePercent": 24,
+              "enabled": true
+            },
+            {
+              "index": 5,
+              "triggerPercent": 19.67,
+              "closePercent": 8,
+              "enabled": true
+            },
+            {
+              "index": 6,
+              "triggerPercent": 29.49,
+              "closePercent": 8,
+              "enabled": true
+            }
+          ],
+          "notes": "MDX-derived balanced profile take-profit ladder is the runtime source of truth for Bot8."
+        },
+        "stopLoss": {
+          "enabled": true,
+          "triggerPercent": 5,
+          "notes": "MDX-derived balanced profile stop-loss is the runtime source of truth for Bot8."
+        },
+        "breakEven": {
+          "enabled": true,
+          "triggerPercent": 2.22,
+          "notes": "MDX-derived balanced profile break-even trigger is the runtime source of truth for Bot8.",
+          "sourceRule": "slToBeTrigger=TP1"
+        },
+        "dca": {
+          "enabled": false,
+          "mode": "levels",
+          "maxAdds": 0,
+          "levels": [],
+          "notes": "DCA is strategically important but intentionally scaffolded only in Sprint 3. Strategy values to be defined later."
+        },
+        "storage": {
+          "databasePath": "./data/s2.sqlite"
+        },
+        "logging": {
+          "level": "info"
+        },
+        "s3": {
+          "enabled": false,
+          "klineInterval": "60",
+          "klineLookback": 20,
+          "htfInterval": "240",
+          "htfLookback": 20,
+          "winLossStreakLookback": 10,
+          "weights": {
+            "rsi": 0.25,
+            "vwap": 0.25,
+            "volumeSpike": 0.2,
+            "htfTrend": 0.2,
+            "winLossStreak": 0.1,
+            "supportResistance": 0
+          },
+          "notes": "Shadow-mode scoring only. No execution changes. supportResistance is stubbed at neutral weight 0 in v1."
+        },
+        "configVersion": "1.0.0",
+        "priceMonitoring": {
+          "enabled": true,
+          "logEveryTick": true,
+          "samplingIntervalMs": 0,
+          "notes": "samplingIntervalMs can be raised later to reduce storage volume for longer-running deployments."
+        }
+      },
+      "validation": {
+        "ok": false,
+        "safeMode": true,
+        "errors": [
+          {
+            "severity": "error",
+            "path": "settings.trading.enabled",
+            "message": "Trading cannot be enabled while TP/SL/BE placeholder zero values exist"
+          }
+        ],
+        "warnings": [],
+        "issues": [
+          {
+            "severity": "error",
+            "path": "settings.trading.enabled",
+            "message": "Trading cannot be enabled while TP/SL/BE placeholder zero values exist"
+          }
+        ]
+      },
+      "mdx": {
+        "enabled": true,
+        "profile": "balanced",
+        "sourcePath": "/home/ubuntu/.openclaw/workspace/Q_S2/mdx/Bot8.source.json",
+        "warnings": [
+          "slType is metadata-only in D3 and not runtime-mapped: ATR",
+          "slValue is metadata-only in D3 and not runtime-mapped"
+        ],
+        "metadata": {
+          "signalBotSourceMeta": {
+            "optimizedPeriod": "2026-04-08 refresh",
+            "exchange": "Bybit",
+            "timeframe": "165m",
+            "signalSetting": 6,
+            "baseline": "VWMA",
+            "baselineValue": 30,
+            "slType": "ATR",
+            "slValue": 3
+          },
+          "sourcePerformanceMeta": {
+            "performance30d": 17.34,
+            "performance90d": 50.03,
+            "performance180d": 100.32,
+            "performance360d": null,
+            "winrate": 73.21,
+            "profitFactor": 1.699
+          },
+          "profilePerformanceMeta": {
+            "tradeCount": 56,
+            "winrate": 73.21,
+            "netProfit": 269.98,
+            "maxDrawdown": -38.84,
+            "avgTradeProfit": 4.82
+          }
+        }
+      }
+    }
+  }
+]
