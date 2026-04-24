@@ -15,7 +15,10 @@ rsync -a "$REPO_DIR/" "$RUNTIME_DIR/"
 printf '\n==> Restart webhook service\n'
 sudo systemctl restart q-s2-webhook
 
+printf '\n==> Restart dashboard service\n'
+sudo systemctl restart q-s2-dashboard
+
 printf '\n==> Service status\n'
-systemctl status q-s2-webhook --no-pager || true
+systemctl status q-s2-webhook q-s2-dashboard --no-pager || true
 
 printf '\nDeploy complete.\n'

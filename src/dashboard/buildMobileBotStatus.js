@@ -3,6 +3,7 @@ const path = require('path');
 const axios = require('axios');
 const { loadBotRegistry } = require('../config/botRegistry');
 const { resolveBotCredentials } = require('../config/resolveBotCredentials');
+const { resolveBotSettings } = require('../config/resolveBotSettings');
 const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite');
 
 function signRequest({ apiKey, apiSecret, timestamp, recvWindow, query = '' }) {
@@ -35,7 +36,20 @@ async function bybitPrivateGet(pathname, query, credentials) {
   return response.data;
 }
 
+function resolveMdxMeta(botId, registryPath) {
+  try {
+    const ctx = resolveBotSettings(botId, { registryPath });
+    return {
+      mdxProfile: ctx.mdx.enabled ? ctx.mdx.profile : null,
+      leverage: ctx.settings.positionSizing.leverage || null,
+    };
+  } catch {
+    return { mdxProfile: null, leverage: null };
+  }
+}
+
 async function fetchBotStatus(bot, registryPath, envPath) {
+  const { mdxProfile, leverage } = resolveMdxMeta(bot.botId, registryPath);
   try {
     const resolved = resolveBotCredentials(bot.botId, { registryPath, envPath });
     const credentials = { apiKey: resolved.apiKey, apiSecret: resolved.apiSecret };
@@ -73,6 +87,8 @@ async function fetchBotStatus(bot, registryPath, envPath) {
       botId: bot.botId,
       symbol: bot.symbol,
       enabled: bot.enabled,
+      mdxProfile,
+      leverage,
       tradeState,
       balance,
       balanceStatus,
@@ -83,6 +99,8 @@ async function fetchBotStatus(bot, registryPath, envPath) {
       botId: bot.botId,
       symbol: bot.symbol,
       enabled: bot.enabled,
+      mdxProfile,
+      leverage,
       tradeState: 'Unknown',
       balance: null,
       balanceStatus: 'error',

@@ -363,6 +363,9 @@ function renderMobileBotStatusHtml(status = {}) {
       ? `${bot.unrealizedPnl >= 0 ? '+' : ''}${bot.unrealizedPnl.toFixed(2)} USDT uPnL`
       : 'uPnL n/a';
     const upnlClass = hasUpnl ? (bot.unrealizedPnl >= 0 ? 'upnl-positive' : 'upnl-negative') : 'upnl-neutral';
+    const profileStr = bot.mdxProfile
+      ? `${bot.mdxProfile.charAt(0).toUpperCase() + bot.mdxProfile.slice(1)}${bot.leverage ? ` · ${bot.leverage}x` : ''}`
+      : '';
 
     return `<div class="bot-card ${enabledClass}">
       <div class="bot-top">
@@ -370,6 +373,7 @@ function renderMobileBotStatusHtml(status = {}) {
         <div class="bot-state ${stateClass}">${bot.tradeState || 'Unknown'}</div>
       </div>
       <div class="bot-meta">${enabled} · ${bot.symbol || 'n/a'}</div>
+      ${profileStr ? `<div class="bot-profile">${profileStr}</div>` : ''}
       <div class="bot-balance">${balance}</div>
       <div class="bot-upnl ${upnlClass}">${upnl}</div>
     </div>`;
@@ -399,6 +403,7 @@ function renderMobileBotStatusHtml(status = {}) {
     .trade-live { background: #14532d; color: #bbf7d0; }
     .trade-flat { background: #1e293b; color: #cbd5e1; }
     .bot-meta { font-size: 13px; opacity: 0.82; margin-top: 4px; }
+    .bot-profile { font-size: 12px; color: #93c5fd; margin-top: 3px; }
     .bot-balance { font-size: 22px; font-weight: 800; margin-top: 8px; }
     .bot-upnl { font-size: 14px; font-weight: 700; margin-top: 6px; }
     .upnl-positive { color: #86efac; }
