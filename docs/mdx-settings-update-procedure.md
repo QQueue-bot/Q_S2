@@ -11,6 +11,16 @@ Both procedures assume the operator has already obtained the new MDX source data
 
 ---
 
+> **CI/CD STATUS: KNOWN BROKEN — READ BEFORE MAKING ANY CHANGES**
+>
+> `main` is not the deploy branch. The GitHub Actions workflow (`.github/workflows/deploy.yml`) triggers on push to `main` and SSHes to EC2 to run `deploy.sh`. However, `deploy.sh` line 10 is `git -C "$REPO_DIR" pull` with no branch argument. The EC2 workspace is checked out on `sprint-scope-review` (tracking `origin/sprint-scope-review`). A bare `git pull` therefore fetches from `origin/sprint-scope-review`, regardless of what triggered the GitHub Actions run. Pushing to `main` does not deploy `main`.
+>
+> **Consequence: All config changes for this procedure must be committed and pushed to `sprint-scope-review`.** Changes pushed only to `main` will not reach the running service.
+>
+> Reconciling the CI/CD so that `main` is the actual deploy branch is a separate task to be done after the MDX update is verified live. Until that task is complete, treat `sprint-scope-review` as the production branch for all deploy purposes.
+
+---
+
 ## How MDX Settings Flow Into Execution
 
 Understanding this prevents mistakes:
@@ -27,21 +37,111 @@ Understanding this prevents mistakes:
 
 ## Deploy Mechanism (Critical)
 
-The EC2 runtime reads files directly from:
+The EC2 service reads files directly from the workspace git checkout:
 ```
 /home/ubuntu/.openclaw/workspace/Q_S2/
 ```
 
-`deploy.sh` does:
+The installed systemd unit has `WorkingDirectory` and `ExecStart` pointing to this path. `rsync` to `/tmp/qs2_review/` in `deploy.sh` is vestigial — nothing reads from `/tmp`.
+
+**What controls which branch gets deployed:**
+
+`deploy.sh` line 10:
 ```bash
-git -C /home/ubuntu/.openclaw/workspace/Q_S2 pull    # pulls current branch (sprint-scope-review)
-rsync -a workspace/ /tmp/qs2_review/                  # no-op: service doesn't read /tmp
-sudo systemctl restart q-s2-webhook
+git -C "$REPO_DIR" pull     # no branch argument
 ```
 
-**Key implication:** The service runs from the workspace git checkout. Deploying means committing to the repo, pushing to the remote, SSHing to EC2, and running `deploy.sh` (or running `git pull` + `systemctl restart` directly). GitHub Actions triggers `deploy.sh` on push to `main`, but `deploy.sh` pulls from whatever branch the EC2 is on (`sprint-scope-review`) — not from `main`. Pushing to `main` triggers a pull of sprint-scope-review and a restart.
+The EC2 workspace is on `sprint-scope-review` with tracking ref `[origin/sprint-scope-review]` (confirmed live). A bare `git pull` resolves to `git pull origin sprint-scope-review`. There is no mention of `main` anywhere in `deploy.sh` or in the `git pull` invocation.
 
-**Always verify the EC2 branch before any deploy:** `ssh openclaw "git -C /home/ubuntu/.openclaw/workspace/Q_S2 branch --show-current"`
+**The deploy sequence for any config change is therefore:**
+```
+commit → push origin sprint-scope-review → EC2: git pull → systemctl restart
+```
+
+The GitHub Actions trigger on `main` push is an optional shortcut that invokes this same sequence via SSH. You can also trigger it manually: `ssh openclaw "cd /home/ubuntu/.openclaw/workspace/Q_S2 && git pull && sudo systemctl restart q-s2-webhook"`.
+
+**Verify EC2 branch before any deploy:**
+```bash
+ssh openclaw "git -C /home/ubuntu/.openclaw/workspace/Q_S2 branch --show-current"
+# Expected: sprint-scope-review
+```
+
+---
+
+## Pre-flight Verification Checklist
+
+Run this after every deploy, before considering the change live. There are three checkpoints: commit present on EC2, service healthy, and resolved settings correct.
+
+### Checkpoint 1 — Confirm the commit landed on EC2
+
+Immediately after `git pull` on EC2 (before the restart), verify the expected commit is HEAD:
+
+```bash
+ssh openclaw "git -C /home/ubuntu/.openclaw/workspace/Q_S2 log -1 --oneline"
+```
+
+The output must show the commit hash and message from the push you just made. If it still shows the prior commit, the pull failed silently (network issue, SSH key issue) or the push did not reach `origin/sprint-scope-review`. Do not restart until this matches.
+
+### Checkpoint 2 — Confirm service restarted cleanly
+
+```bash
+ssh openclaw "systemctl is-active q-s2-webhook"
+# Expected: active
+
+ssh openclaw "journalctl -u q-s2-webhook --since '30 seconds ago' --no-pager | tail -20"
+# Expected: no uncaught exception or crash lines; should show normal startup log
+```
+
+If the service is `failed` or `inactive`, the config change likely introduced a parse error. Check the journal for the throw message, revert the commit, and redeploy.
+
+### Checkpoint 3 — Confirm resolved settings show the new values
+
+Run the resolver directly against the EC2 working tree. This is the definitive check — it exercises the same code path the webhook uses for every incoming signal.
+
+**For Bot4 symbol swap:**
+```bash
+ssh openclaw "cd /home/ubuntu/.openclaw/workspace/Q_S2 && node -e \"
+const { resolveBotSettings } = require('./src/config/resolveBotSettings');
+try {
+  const ctx = resolveBotSettings('Bot4');
+  console.log('Bot4 symbol:', ctx.symbol);
+  console.log('Bot4 enabled:', ctx.bot.enabled);
+  console.log('MDX profile:', ctx.mdx.profile);
+  console.log('leverage:', ctx.settings.positionSizing.leverage);
+  console.log('SL%:', ctx.settings.stopLoss.triggerPercent);
+  console.log('BE trigger%:', ctx.settings.breakEven.triggerPercent);
+  console.log('TP1 trigger%:', ctx.settings.takeProfit.levels[0].triggerPercent);
+} catch(e) { console.error('FAILED:', e.message); process.exit(1); }
+\""
+```
+
+Expected output after a symbol swap (values depend on the new MDX source):
+- `Bot4 symbol: <NEWTOKENUSDT>` (not CRVUSDT)
+- `Bot4 enabled: false` (until the enable step)
+- `MDX profile: balanced`
+- leverage, SL%, BE trigger%, TP1 trigger% matching the new MDX `balanced` profile values
+
+**For Bot2 profile change:**
+```bash
+ssh openclaw "cd /home/ubuntu/.openclaw/workspace/Q_S2 && node -e \"
+const { resolveBotSettings } = require('./src/config/resolveBotSettings');
+try {
+  const ctx = resolveBotSettings('Bot2');
+  console.log('MDX profile:', ctx.mdx.profile);
+  console.log('leverage:', ctx.settings.positionSizing.leverage);
+  console.log('BE trigger%:', ctx.settings.breakEven.triggerPercent);
+  console.log('TP1 trigger%:', ctx.settings.takeProfit.levels[0].triggerPercent);
+} catch(e) { console.error('FAILED:', e.message); process.exit(1); }
+\""
+```
+
+Expected output after switching to balanced:
+- `MDX profile: balanced`
+- `leverage: 4` (was 6)
+- `BE trigger%: 4.22` (was 4.87)
+- `TP1 trigger%: 4.22` (was 4.87)
+
+If any value is wrong or the resolver throws, diagnose before allowing any live signals to reach that bot.
 
 ---
 
@@ -280,15 +380,16 @@ Alternatively, run the resolve script locally (after `git pull`):
 ```bash
 node -e "
 const { resolveBotSettings } = require('./src/config/resolveBotSettings');
-resolveBotSettings('Bot2').then(ctx => {
-  console.log('leverage:', ctx.settings.positionSizing.leverage);
-  console.log('BE trigger:', ctx.settings.breakEven.triggerPercent);
-  console.log('profile:', ctx.mdxSelectedProfile);
-}).catch(console.error);
+const ctx = resolveBotSettings('Bot2');
+console.log('profile:', ctx.mdx.profile);
+console.log('leverage:', ctx.settings.positionSizing.leverage);
+console.log('BE trigger%:', ctx.settings.breakEven.triggerPercent);
 "
 ```
 
-Expected output: `leverage: 4`, `BE trigger: 4.22`, `profile: balanced`.
+Expected output: `profile: balanced`, `leverage: 4`, `BE trigger%: 4.22`.
+
+The pre-flight Checkpoint 3 command (run on EC2) is the authoritative version — prefer that over running locally, as it exercises the exact working tree that the service reads.
 
 ---
 
