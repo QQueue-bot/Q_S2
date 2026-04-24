@@ -1,0 +1,124 @@
+[
+  {
+    "timestamp": "2026-04-24T19:09:53.716Z",
+    "botId": "Bot1",
+    "positions_closed": [
+      {
+        "symbol": "STXUSDT",
+        "side": "Buy",
+        "size_closed": 175.8,
+        "unrealised_pnl_at_close": 0.84384,
+        "avg_entry_price": 0.2238,
+        "close_order_id": "76e57ef4-15f3-48ae-9644-56451d9006a6",
+        "bybit_retCode": 0,
+        "bybit_retMsg": "OK"
+      }
+    ],
+    "orders_cancelled": [],
+    "final_position_check": "flat"
+  },
+  {
+    "timestamp": "2026-04-24T19:09:56.259Z",
+    "botId": "Bot2",
+    "positions_closed": [
+      {
+        "symbol": "NEARUSDT",
+        "side": "Sell",
+        "size_closed": 42.4,
+        "unrealised_pnl_at_close": -1.19144,
+        "avg_entry_price": 1.3812,
+        "close_order_id": "2ab693ef-f415-447e-be39-2c59e0fdb5be",
+        "bybit_retCode": 0,
+        "bybit_retMsg": "OK"
+      }
+    ],
+    "orders_cancelled": [],
+    "final_position_check": "flat"
+  },
+  {
+    "timestamp": "2026-04-24T19:09:58.751Z",
+    "botId": "Bot3",
+    "positions_closed": [
+      {
+        "symbol": "PAXGUSDT",
+        "side": "Buy",
+        "size_closed": 0.01,
+        "unrealised_pnl_at_close": -0.777,
+        "avg_entry_price": 4787.1,
+        "close_order_id": "edf70fcb-55e0-4600-986a-9b92a61ab13e",
+        "bybit_retCode": 0,
+        "bybit_retMsg": "OK"
+      }
+    ],
+    "orders_cancelled": [],
+    "final_position_check": "flat"
+  },
+  {
+    "timestamp": "2026-04-24T19:10:01.243Z",
+    "botId": "Bot4",
+    "positions_closed": [],
+    "orders_cancelled": [],
+    "final_position_check": "flat"
+  },
+  {
+    "timestamp": "2026-04-24T19:10:03.234Z",
+    "botId": "Bot5",
+    "positions_closed": [
+      {
+        "symbol": "WIFUSDT",
+        "side": "Sell",
+        "size_closed": 137,
+        "unrealised_pnl_at_close": 2.51806,
+        "avg_entry_price": 0.19862,
+        "close_order_id": "7663530e-b5f9-4ffa-8094-2781b825b780",
+        "bybit_retCode": 0,
+        "bybit_retMsg": "OK"
+      }
+    ],
+    "orders_cancelled": [],
+    "final_position_check": "flat"
+  },
+  {
+    "timestamp": "2026-04-24T19:10:05.710Z",
+    "botId": "Bot6",
+    "positions_closed": [
+      {
+        "symbol": "IPUSDT",
+        "side": "Sell",
+        "size_closed": 70.8,
+        "unrealised_pnl_at_close": 2.7966,
+        "avg_entry_price": 0.5694,
+        "close_order_id": "af9e6325-c5ec-4999-a66d-1111d7ab35c8",
+        "bybit_retCode": 0,
+        "bybit_retMsg": "OK"
+      }
+    ],
+    "orders_cancelled": [],
+    "final_position_check": "flat"
+  },
+  {
+    "timestamp": "2026-04-24T19:10:08.192Z",
+    "botId": "Bot7",
+    "positions_closed": [],
+    "orders_cancelled": [],
+    "final_position_check": "flat"
+  },
+  {
+    "timestamp": "2026-04-24T19:10:10.180Z",
+    "botId": "Bot8",
+    "positions_closed": [
+      {
+        "symbol": "PUMPFUNUSDT",
+        "side": "Sell",
+        "size_closed": 19700,
+        "unrealised_pnl_at_close": 2.18079,
+        "avg_entry_price": 0.0018957,
+        "close_order_id": "9e36e767-4100-48e2-9c99-0854bf2bf2d0",
+        "bybit_retCode": 0,
+        "bybit_retMsg": "OK"
+      }
+    ],
+    "orders_cancelled": [],
+    "final_position_check": "flat"
+  }
+]

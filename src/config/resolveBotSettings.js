@@ -40,8 +40,6 @@ function resolveBotSettings(botId, options = {}) {
     const mergedSettings = JSON.parse(JSON.stringify(validated.settings));
     mergedSettings.positionSizing = {
       ...mergedSettings.positionSizing,
-      accountPercent: 10,
-      notes: 'Cautious live validation baseline: use 10% of account until all bots are proven operationally.',
       ...mdxResolved.runtimeSettings.positionSizing,
     };
     mergedSettings.takeProfit = {

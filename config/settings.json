@@ -6,15 +6,15 @@
   },
   "trading": {
     "enabled": true,
-    "defaultSymbol": "STXUSDT",
+    "defaultSymbol": "DEEPUSDT",
     "allowedSymbols": [
-      "STXUSDT",
+      "DEEPUSDT",
       "NEARUSDT",
       "PAXGUSDT",
-      "CRVUSDT",
+      "ZECUSDT",
       "WIFUSDT",
       "IPUSDT",
-      "FLOKIUSDT",
+      "1000FLOKIUSDT",
       "PUMPFUNUSDT"
     ],
     "supportedSignals": [

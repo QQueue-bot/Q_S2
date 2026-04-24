@@ -3,7 +3,7 @@
     {
       "botId": "Bot1",
       "enabled": true,
-      "symbol": "STXUSDT",
+      "symbol": "DEEPUSDT",
       "settingsRef": "./settings.json",
       "credentialRef": {
         "apiKeyEnv": "S2_BOT1_API_KEY",
@@ -26,7 +26,7 @@
         "apiSecretEnv": "S2_BOT2_API_SECRET"
       },
       "mdxSourceRef": "../mdx/Bot2.source.json",
-      "mdxProfile": "aggressive",
+      "mdxProfile": "balanced",
       "dcaPolicy": {
         "enabled": true
       },
@@ -50,8 +50,8 @@
     },
     {
       "botId": "Bot4",
-      "enabled": false,
-      "symbol": "CRVUSDT",
+      "enabled": true,
+      "symbol": "ZECUSDT",
       "settingsRef": "./settings.json",
       "credentialRef": {
         "apiKeyEnv": "S2_BOT4_API_KEY",
@@ -99,7 +99,7 @@
     {
       "botId": "Bot7",
       "enabled": true,
-      "symbol": "FLOKIUSDT",
+      "symbol": "1000FLOKIUSDT",
       "settingsRef": "./settings.json",
       "credentialRef": {
         "apiKeyEnv": "S2_BOT7_API_KEY",
