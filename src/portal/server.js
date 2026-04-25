@@ -716,7 +716,12 @@ async function handleRequest(req, res, options) {
   }
 
   // ── S6 proxy — Funnel (port 8083) ────────────────────────────────────────
-  if (path === '/s6' || path.startsWith('/s6/')) {
+  if (path === '/s6') {
+    res.writeHead(302, { Location: '/s6/funnel' });
+    res.end();
+    return;
+  }
+  if (path.startsWith('/s6/')) {
     proxyRequest(req, res, { targetPort: 8083, prefix: '/s6', activeTab: 's6', rewritePaths: true });
     return;
   }
