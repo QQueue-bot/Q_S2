@@ -2,6 +2,9 @@
 
 const crypto = require('crypto');
 const path = require('path');
+
+// All DB queries filter records older than this to exclude pre-reset data
+const SYSTEM_RESET_AT = '2026-04-24T19:09:00.000Z';
 const { execSync } = require('child_process');
 const axios = require('axios');
 const { loadBotRegistry } = require('../config/botRegistry');
@@ -146,19 +149,21 @@ function loadLatestTradeActivity(dbPath) {
     const latestSignal = db.prepare(`
       SELECT received_at, bot_id, signal, raw_input
       FROM normalized_signals
+      WHERE received_at >= '${SYSTEM_RESET_AT}'
       ORDER BY id DESC
       LIMIT 1
     `).get() || null;
     const latestOrder = db.prepare(`
       SELECT created_at, bot_id, symbol, signal, status, side, qty, notional_usd, response_json
       FROM order_attempts
+      WHERE created_at >= '${SYSTEM_RESET_AT}'
       ORDER BY id DESC
       LIMIT 1
     `).get() || null;
     const latestFailure = db.prepare(`
       SELECT created_at, bot_id, symbol, signal, status, response_json
       FROM order_attempts
-      WHERE status = 'failed'
+      WHERE status = 'failed' AND created_at >= '${SYSTEM_RESET_AT}'
       ORDER BY id DESC
       LIMIT 1
     `).get() || null;
@@ -256,26 +261,26 @@ function loadBotTradeStats(db, botId, symbol = null) {
 
     const exits = db.prepare(`
       SELECT created_at, exit_reason, trigger_percent, qty, mark_price
-      FROM exit_events WHERE bot_id = ?
+      FROM exit_events WHERE bot_id = ? AND created_at >= '${SYSTEM_RESET_AT}'
       ORDER BY id DESC
     `).all(botId);
 
     const lastSignal = db.prepare(`
       SELECT received_at, signal, raw_input
-      FROM normalized_signals WHERE bot_id = ?
+      FROM normalized_signals WHERE bot_id = ? AND received_at >= '${SYSTEM_RESET_AT}'
       ORDER BY id DESC LIMIT 1
     `).get(botId) || null;
 
-    // Filter by current configured symbol to exclude stale records from prior instruments
+    // Filter by current configured symbol and reset date to exclude stale records
     const lastOrder = symbol
       ? db.prepare(`
           SELECT created_at, signal, status, side
-          FROM order_attempts WHERE bot_id = ? AND symbol = ?
+          FROM order_attempts WHERE bot_id = ? AND symbol = ? AND created_at >= '${SYSTEM_RESET_AT}'
           ORDER BY id DESC LIMIT 1
         `).get(botId, symbol) || null
       : db.prepare(`
           SELECT created_at, signal, status, side
-          FROM order_attempts WHERE bot_id = ?
+          FROM order_attempts WHERE bot_id = ? AND created_at >= '${SYSTEM_RESET_AT}'
           ORDER BY id DESC LIMIT 1
         `).get(botId) || null;
 
@@ -310,7 +315,7 @@ function loadBotSignalAnalysis(db, botId, symbol) {
 
 function loadPortfolioReviewCriteria(db, bots, portfolioBaseline) {
   try {
-    const allExits = db.prepare('SELECT exit_reason FROM exit_events').all();
+    const allExits = db.prepare(`SELECT exit_reason FROM exit_events WHERE created_at >= '${SYSTEM_RESET_AT}'`).all();
     const totalExits = allExits.length;
     const totalWins = allExits.filter(e => e.exit_reason === 'take_profit').length;
     const winRate = totalExits > 0 ? totalWins / totalExits : 0;
