@@ -430,12 +430,12 @@ async function buildMobileBotStatus(options = {}) {
       ? Number(process.env.PORTFOLIO_BASELINE_USDT)
       : null;
     reviewCriteria = loadPortfolioReviewCriteria(db, bots, portfolioBaseline);
-    db.close();
     botsWithStats = bots.map(bot => ({
       ...bot,
       tradeStats: tradeStatsByBot[bot.botId] || null,
       signalAnalysis: loadBotSignalAnalysis(db, bot.botId, bot.symbol),
     }));
+    db.close();
   } catch {}
 
   const validBalances = bots.filter(b => Number.isFinite(b.balance));
