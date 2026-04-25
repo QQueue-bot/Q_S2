@@ -1,8 +1,11 @@
 'use strict';
 
 const http = require('http');
+const fs = require('fs');
 const crypto = require('crypto');
 const { buildMobileBotStatus } = require('../dashboard/buildMobileBotStatus');
+
+const S4_EMA_LIVE_DIR = '/home/ubuntu/s4_ema_live';
 
 const PORTAL_PASSWORD = process.env.PORTAL_PASSWORD || '';
 const COOKIE_NAME = 'portal_token';
@@ -450,6 +453,177 @@ function renderS2Page(status) {
   return pageShell('s2', 'S2 — Q Portal', CSS, body, '<meta http-equiv="refresh" content="15">');
 }
 
+// ─── Reverse proxy helpers ────────────────────────────────────────────────────
+
+function injectPortalNav(html, activeTab) {
+  const tabs = [['s2', 'S2'], ['s4', 'S4'], ['s6', 'S6']];
+  const tabsHtml = tabs.map(([key, label]) => {
+    const isActive = key === activeTab;
+    const bg = isActive ? 'background:#1e3a5f;' : '';
+    const color = isActive ? 'color:#93c5fd;' : 'color:#94a3b8;';
+    return `<a href="/${key}" style="padding:6px 14px;border-radius:8px;font-size:14px;font-weight:600;${bg}${color}text-decoration:none;">${label}</a>`;
+  }).join('');
+
+  const nav = `<div id="q-portal-nav" style="position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#111827;border-bottom:1px solid #1f2937;display:flex;align-items:center;gap:4px;padding:0 16px;height:41px;font-family:Inter,system-ui,-apple-system,sans-serif;">
+  <span style="font-size:13px;font-weight:700;color:#93c5fd;margin-right:12px;letter-spacing:.05em;white-space:nowrap;">Q Portal</span>
+  ${tabsHtml}
+</div>
+<style>body{padding-top:41px!important;}.navbar.sticky-top,.navbar.fixed-top,.sticky-top{top:41px!important;}</style>`;
+
+  if (/<body[\s>]/i.test(html)) {
+    return html.replace(/<body([^>]*)>/i, `<body$1>\n${nav}`);
+  }
+  return nav + html;
+}
+
+function rewriteHtmlPaths(html, prefix) {
+  return html
+    // HTML attributes: href="/...", src="/...", action="/...", data-src="/..."
+    .replace(/((?:href|src|action|data-src|data-href|data-url)=")\/(?![/"])/g, `$1${prefix}/`)
+    // JS fetch('/...') — single or double quotes
+    .replace(/(\bfetch\s*\(\s*)'\/(?![/'])/g, `$1'${prefix}/`)
+    .replace(/(\bfetch\s*\(\s*)"\/(?![/"])/g, `$1"${prefix}/`)
+    // window.location = '/...' or window.location.href = '/...'
+    .replace(/(window\.location(?:\.href)?\s*=\s*)'\/(?![/'])/g, `$1'${prefix}/`)
+    .replace(/(window\.location(?:\.href)?\s*=\s*)"\/(?![/"])/g, `$1"${prefix}/`);
+}
+
+function proxyRequest(req, res, { targetPort, prefix, activeTab, rewritePaths = false }) {
+  const rawUrl = req.url || '/';
+  const qIdx = rawUrl.indexOf('?');
+  const rawPath = qIdx >= 0 ? rawUrl.slice(0, qIdx) : rawUrl;
+  const rawQuery = qIdx >= 0 ? rawUrl.slice(qIdx) : '';
+
+  let targetPath = rawPath.startsWith(prefix) ? rawPath.slice(prefix.length) : rawPath;
+  if (!targetPath || targetPath === '') targetPath = '/';
+  if (!targetPath.startsWith('/')) targetPath = '/' + targetPath;
+
+  const upstreamReq = http.request(
+    {
+      hostname: '127.0.0.1',
+      port: targetPort,
+      path: targetPath + rawQuery,
+      method: req.method,
+      headers: {
+        ...req.headers,
+        host: `127.0.0.1:${targetPort}`,
+      },
+    },
+    (upstreamRes) => {
+      const status = upstreamRes.statusCode;
+      const headers = {};
+      for (const [k, v] of Object.entries(upstreamRes.headers)) {
+        if (k === 'transfer-encoding') continue;
+        headers[k] = v;
+      }
+
+      // Rewrite Location for redirects
+      if (headers.location) {
+        const loc = headers.location;
+        if (loc.startsWith('/') && !loc.startsWith('//')) {
+          headers.location = prefix + loc;
+        }
+      }
+
+      const contentType = headers['content-type'] || '';
+      const isHtml = contentType.includes('text/html');
+
+      if (!isHtml) {
+        res.writeHead(status, headers);
+        upstreamRes.pipe(res);
+        return;
+      }
+
+      delete headers['content-length'];
+      const chunks = [];
+      upstreamRes.on('data', chunk => chunks.push(Buffer.from(chunk)));
+      upstreamRes.on('end', () => {
+        let html = Buffer.concat(chunks).toString('utf8');
+        if (rewritePaths) html = rewriteHtmlPaths(html, prefix);
+        html = injectPortalNav(html, activeTab);
+        const buf = Buffer.from(html, 'utf8');
+        headers['content-length'] = buf.length;
+        res.writeHead(status, headers);
+        res.end(buf);
+      });
+    }
+  );
+
+  upstreamReq.on('error', (err) => {
+    if (!res.headersSent) {
+      res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end(`Proxy error: ${err.message}`);
+    }
+  });
+
+  req.pipe(upstreamReq);
+}
+
+// ─── S4 EMA Live page ─────────────────────────────────────────────────────────
+
+function renderEmaLivePage() {
+  const CSS = `
+    .pg{padding:16px;max-width:900px;margin:0 auto;}
+    h1{font-size:17px;font-weight:700;color:#94a3b8;margin:0 0 12px;letter-spacing:.04em;text-transform:uppercase;}
+    .state-card{background:#111827;border:1px solid #1f2937;border-radius:12px;padding:14px;margin-bottom:12px;}
+    .state-row{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px solid #1e293b;}
+    .state-row:last-child{border:none;}
+    .state-key{color:#64748b;}
+    table{width:100%;border-collapse:collapse;background:#111827;border-radius:12px;overflow:hidden;border:1px solid #1f2937;}
+    th{text-align:left;padding:10px 12px;font-size:12px;color:#64748b;border-bottom:1px solid #1f2937;font-weight:600;}
+    td{padding:9px 12px;font-size:13px;border-bottom:1px solid #1e293b;}
+    tr:last-child td{border:none;}
+    .pos{color:#86efac;}.neg{color:#fca5a5;}.neutral{color:#94a3b8;}
+    .err{color:#fca5a5;padding:16px;}
+    .loading{color:#64748b;padding:16px;}
+    .footer{font-size:11px;color:#334155;text-align:center;margin-top:12px;}
+  `;
+  const body = `<div class="pg">
+    <h1>S4 — EMA Live</h1>
+    <div id="state-wrap"><div class="loading">Loading state…</div></div>
+    <div id="trades-wrap"><div class="loading">Loading trades…</div></div>
+    <div class="footer" id="ts"></div>
+  </div>
+  <script>
+  async function load() {
+    try {
+      const r = await fetch('/s4/ema-live/data');
+      const d = await r.json();
+      if (d.error) { document.getElementById('state-wrap').innerHTML = '<div class="err">Error: ' + d.error + '</div>'; return; }
+
+      const state = d.state || {};
+      const stateRows = Object.entries(state).map(([k,v]) =>
+        '<div class="state-row"><span class="state-key">' + k + '</span><span>' + JSON.stringify(v) + '</span></div>'
+      ).join('');
+      document.getElementById('state-wrap').innerHTML = stateRows
+        ? '<div class="state-card">' + stateRows + '</div>'
+        : '<div class="state-card" style="color:#64748b;font-size:13px;">No state data</div>';
+
+      const trades = Array.isArray(d.trades) ? d.trades : (typeof d.trades === 'object' ? Object.values(d.trades) : []);
+      if (!trades.length) {
+        document.getElementById('trades-wrap').innerHTML = '<div class="state-card" style="color:#64748b;font-size:13px;">No trades</div>';
+        return;
+      }
+      const cols = Object.keys(trades[0] || {});
+      const thead = '<tr>' + cols.map(c => '<th>' + c + '</th>').join('') + '</tr>';
+      const tbody = trades.map(t => '<tr>' + cols.map(c => {
+        const v = t[c];
+        const n = parseFloat(v);
+        const cls = !isNaN(n) && cols[c] !== undefined ? (n > 0 ? 'pos' : n < 0 ? 'neg' : 'neutral') : '';
+        return '<td class="' + cls + '">' + (v === null || v === undefined ? '–' : v) + '</td>';
+      }).join('') + '</tr>').join('');
+      document.getElementById('trades-wrap').innerHTML = '<table><thead>' + thead + '</thead><tbody>' + tbody + '</tbody></table>';
+      document.getElementById('ts').textContent = 'Loaded ' + new Date().toISOString();
+    } catch(e) {
+      document.getElementById('state-wrap').innerHTML = '<div class="err">Fetch error: ' + e.message + '</div>';
+    }
+  }
+  load();
+  setInterval(load, 15000);
+  </script>`;
+  return pageShell('s4', 'S4 EMA Live — Q Portal', CSS, body, '<meta http-equiv="refresh" content="30">');
+}
+
 // ─── Iframe pages ─────────────────────────────────────────────────────────────
 
 function renderIframe(section, url) {
@@ -518,6 +692,45 @@ async function handleRequest(req, res, options) {
     return;
   }
 
+  // ── S6 proxy (all methods) ────────────────────────────────────────────────
+  if (path === '/s6' || path.startsWith('/s6/')) {
+    proxyRequest(req, res, { targetPort: 8083, prefix: '/s6', activeTab: 's6', rewritePaths: true });
+    return;
+  }
+
+  // ── S4 EMA Live (portal-native page + data endpoint) ─────────────────────
+  if (path === '/s4/ema-live') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(renderEmaLivePage());
+    return;
+  }
+
+  if (path === '/s4/ema-live/data') {
+    try {
+      const stateRaw = fs.readFileSync(`${S4_EMA_LIVE_DIR}/state.json`, 'utf8');
+      const tradesRaw = fs.readFileSync(`${S4_EMA_LIVE_DIR}/trades.json`, 'utf8');
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ state: JSON.parse(stateRaw), trades: JSON.parse(tradesRaw) }));
+    } catch (err) {
+      res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // ── S4_2 proxy (all methods, longer prefix first) ─────────────────────────
+  if (path === '/s4/s4_2' || path.startsWith('/s4/s4_2/')) {
+    proxyRequest(req, res, { targetPort: 8080, prefix: '/s4/s4_2', activeTab: 's4' });
+    return;
+  }
+
+  // ── S4 proxy (all methods) ────────────────────────────────────────────────
+  if (path === '/s4' || path.startsWith('/s4/')) {
+    proxyRequest(req, res, { targetPort: 80, prefix: '/s4', activeTab: 's4' });
+    return;
+  }
+
+  // ── Portal-native routes (GET/HEAD only) ──────────────────────────────────
   if (method !== 'GET' && method !== 'HEAD') {
     res.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('Method not allowed');
@@ -555,20 +768,6 @@ async function handleRequest(req, res, options) {
       res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end(`Failed to render S2: ${err.message}`);
     }
-    return;
-  }
-
-  if (path === '/s4') {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    if (method !== 'HEAD') res.end(renderComingSoon('s4', 'S4 — Coming Soon', 'S4 pump detector integration is planned for Phase 5. Check back soon.'));
-    else res.end();
-    return;
-  }
-
-  if (path === '/s6') {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    if (method !== 'HEAD') res.end(renderIframe('s6', 'https://s6.tbotsys.one'));
-    else res.end();
     return;
   }
 
