@@ -725,7 +725,12 @@ async function handleRequest(req, res, options) {
   }
 
   // ── S4 proxy (all methods) ────────────────────────────────────────────────
-  if (path === '/s4' || path.startsWith('/s4/')) {
+  if (path === '/s4') {
+    res.writeHead(302, { Location: '/s4/s4_dashboard.html' });
+    res.end();
+    return;
+  }
+  if (path.startsWith('/s4/')) {
     proxyRequest(req, res, { targetPort: 80, prefix: '/s4', activeTab: 's4' });
     return;
   }
