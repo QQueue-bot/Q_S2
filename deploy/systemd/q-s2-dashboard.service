@@ -15,6 +15,8 @@ Environment=S2_ENV_PATH=/home/ubuntu/.openclaw/.env
 Environment=PORTAL_PASSWORD=
 # MDX subscription renewal date (YYYY-MM-DD) — colour-coded countdown on /s2
 Environment=MDX_RENEWAL_DATE=2026-05-25
+# Portfolio baseline at last capital reset — used for P&L and per-bot drawdown criteria
+Environment=PORTFOLIO_BASELINE_USDT=2799.94
 ExecStart=/usr/bin/env node /tmp/qs2_review/scripts/run-portal.js
 Restart=always
 RestartSec=5

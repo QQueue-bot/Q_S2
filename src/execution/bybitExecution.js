@@ -401,6 +401,44 @@ async function executeCloseOrder({ symbol, botId, livePosition, closePercent, ex
   };
 }
 
+// Place a native stop-loss at position level via /v5/position/trading-stop.
+// Called immediately after an entry order fills. Uses the reference price at entry
+// time as a proxy for fill price (market orders fill within ms of submission).
+// Position-level SL is automatically cleared by Bybit when the position closes.
+async function submitNativeSL({ symbol, side, referencePrice, stopLossPercent, tickSize, credentials, bybitBaseUrl }) {
+  const slPct = Number(stopLossPercent) || 0;
+  if (slPct <= 0) {
+    return { ok: false, skipped: true, reason: 'no_sl_configured' };
+  }
+
+  const tick = Number(tickSize) || 0.0001;
+  const prec = decimalPlaces(tick);
+
+  // Round SL away from entry so it is never closer than requested
+  const rawSlPrice = side === 'Buy'
+    ? referencePrice * (1 - slPct / 100)
+    : referencePrice * (1 + slPct / 100);
+  const slPrice = side === 'Buy'
+    ? (Math.floor(rawSlPrice / tick) * tick).toFixed(prec)
+    : (Math.ceil(rawSlPrice / tick) * tick).toFixed(prec);
+
+  const payload = {
+    category: 'linear',
+    symbol,
+    stopLoss: slPrice,
+    slTriggerBy: 'LastPrice',
+    positionIdx: 0,
+  };
+
+  const result = await bybitPrivatePost('/v5/position/trading-stop', payload, credentials, { bybitBaseUrl });
+  return {
+    ok: result.ok && result.json?.retCode === 0,
+    slPrice,
+    slPct,
+    response: result.json,
+  };
+}
+
 async function submitEntryOrder({ symbol, side, qty, botId, signal, notionalUsd, credentials, persistence, stageName = 'initial_entry', bybitBaseUrl }) {
   const entryPayload = {
     category: 'linear',
@@ -538,6 +576,22 @@ async function executePaperTrade(parsedSignal, options = {}) {
     response_json: JSON.stringify(firstEntry.response),
   });
 
+  // Phase 4.5: place native position-level SL immediately after initial entry fills
+  let nativeSl = null;
+  if (firstEntry.ok) {
+    const slPct = botContext.settings?.stopLoss?.triggerPercent || 0;
+    const tickSize = instrument.priceFilter?.tickSize || '0.0001';
+    nativeSl = await submitNativeSL({
+      symbol,
+      side,
+      referencePrice: Number(latestTick.last_price),
+      stopLossPercent: slPct,
+      tickSize,
+      credentials,
+      bybitBaseUrl,
+    });
+  }
+
   let delayedEntry = null;
   const tradeId = firstEntry.ok ? `${symbol}:${side}:${Date.now()}` : null;
   if (firstEntry.ok && !dcaStrategy.enabled) {
@@ -673,6 +727,7 @@ async function executePaperTrade(parsedSignal, options = {}) {
     effectiveAccountBalanceUsd,
     instrumentLotSize: lot,
     reversal,
+    nativeSl,
     stagedEntry: {
       enabled: true,
       strategy: dcaStrategy.mode,
