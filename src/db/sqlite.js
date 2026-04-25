@@ -160,6 +160,18 @@ function initSchema(db) {
       side TEXT,
       response_json TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS signal_analysis (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trade_id TEXT NOT NULL UNIQUE,
+      bot_id TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      s6_directive TEXT,
+      conviction_score INTEGER,
+      analysis_text TEXT,
+      chart_image_path TEXT,
+      processed_at TEXT NOT NULL
+    );
   `);
 
   const ensureColumn = (tableName, columnName, columnSql) => {

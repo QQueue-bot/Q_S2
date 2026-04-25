@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Q S2 Signal Analysis every 5 minutes
+After=network.target
+
+[Timer]
+OnBootSec=60
+OnUnitActiveSec=5min
+AccuracySec=30
+Unit=q-s2-analysis.service
+
+[Install]
+WantedBy=timers.target
