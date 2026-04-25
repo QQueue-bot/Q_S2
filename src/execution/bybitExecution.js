@@ -10,6 +10,7 @@ const { resolveDcaStrategy } = require('../config/resolveDcaStrategy');
 const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite');
 
 const DEFAULT_BYBIT_BASE_URL = 'https://api-demo.bybit.com';
+const ANALYSIS_QUEUE_DIR = '/home/ubuntu/s2/data/analysis_queue';
 
 function getBybitBaseUrl(options = {}) {
   if (options.bybitBaseUrl) return options.bybitBaseUrl;
@@ -61,6 +62,43 @@ function computeOrderSizing({ effectiveAccountBalanceUsd, accountPercent, levera
     notionalUsd: finalNotional,
     qty: qty.toFixed(decimalPlaces(qtyStep)),
   };
+}
+
+async function fetchKlineCandles(symbol, options = {}) {
+  const baseUrl = getBybitBaseUrl(options);
+  const response = await axios.get(`${baseUrl}/v5/market/kline?category=linear&symbol=${symbol}&interval=60&limit=100`);
+  const list = response.data?.result?.list || [];
+  return list.slice().reverse().map(row => ({
+    t: Number(row[0]),
+    o: Number(row[1]),
+    h: Number(row[2]),
+    l: Number(row[3]),
+    c: Number(row[4]),
+    v: Number(row[5]),
+  }));
+}
+
+function writeAnalysisQueueJob({ botId, symbol, tradeId, side, signal, entryPrice, candles }) {
+  try {
+    fs.mkdirSync(ANALYSIS_QUEUE_DIR, { recursive: true });
+    const safeId = tradeId.replace(/[^a-z0-9_-]/gi, '_');
+    const filePath = path.join(ANALYSIS_QUEUE_DIR, `${safeId}.json`);
+    fs.writeFileSync(filePath, JSON.stringify({
+      jobId: safeId,
+      status: 'pending',
+      botId,
+      symbol,
+      tradeId,
+      signalDirection: signal,
+      side,
+      entryPrice,
+      timestamp: new Date().toISOString(),
+      candles,
+    }, null, 2));
+    return { ok: true, filePath };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
 }
 
 async function getInstrumentInfo(symbol, options = {}) {
@@ -636,6 +674,26 @@ async function executePaperTrade(parsedSignal, options = {}) {
 
   let delayedEntry = null;
   const tradeId = firstEntry.ok ? `${symbol}:${side}:${Date.now()}` : null;
+
+  // Phase 6: write analysis queue job with 100 1H candles immediately after entry
+  let analysisJob = null;
+  if (tradeId) {
+    try {
+      const candles = await fetchKlineCandles(symbol, { bybitBaseUrl });
+      analysisJob = writeAnalysisQueueJob({
+        botId: parsedSignal.botId,
+        symbol,
+        tradeId,
+        side,
+        signal: parsedSignal.signal,
+        entryPrice: Number(latestTick.last_price),
+        candles,
+      });
+    } catch (err) {
+      analysisJob = { ok: false, error: err.message };
+    }
+  }
+
   if (firstEntry.ok && !dcaStrategy.enabled) {
     persistence.recordDcaEvent({
       created_at: new Date().toISOString(),
@@ -770,6 +828,7 @@ async function executePaperTrade(parsedSignal, options = {}) {
     instrumentLotSize: lot,
     reversal,
     nativeSl,
+    analysisJob,
     stagedEntry: {
       enabled: true,
       strategy: dcaStrategy.mode,

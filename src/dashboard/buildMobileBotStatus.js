@@ -295,6 +295,19 @@ function loadBotTradeStats(db, botId, symbol = null) {
   }
 }
 
+function loadBotSignalAnalysis(db, botId, symbol) {
+  try {
+    return db.prepare(`
+      SELECT s6_directive, conviction_score, analysis_text, processed_at
+      FROM signal_analysis
+      WHERE bot_id = ? AND symbol = ?
+      ORDER BY id DESC LIMIT 1
+    `).get(botId, symbol) || null;
+  } catch {
+    return null;
+  }
+}
+
 function loadPortfolioReviewCriteria(db, bots, portfolioBaseline) {
   try {
     const allExits = db.prepare('SELECT exit_reason FROM exit_events').all();
@@ -416,6 +429,7 @@ async function buildMobileBotStatus(options = {}) {
     botsWithStats = bots.map(bot => ({
       ...bot,
       tradeStats: tradeStatsByBot[bot.botId] || null,
+      signalAnalysis: loadBotSignalAnalysis(db, bot.botId, bot.symbol),
     }));
   } catch {}
 

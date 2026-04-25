@@ -276,6 +276,22 @@ function renderBotCard(bot) {
     ? `${bot.mdxProfile.charAt(0).toUpperCase() + bot.mdxProfile.slice(1)}${bot.leverage ? ` · ${bot.leverage}x` : ''}`
     : '';
 
+  // Signal analysis badge (S6 directive)
+  const sa = bot.signalAnalysis;
+  let analysisBadgeHtml = '';
+  if (sa) {
+    const dColors = { TRADE: '#86efac', WAIT: '#fcd34d', AVOID: '#fca5a5', MONITOR: '#93c5fd' };
+    const dColor = dColors[sa.s6_directive] || '#94a3b8';
+    const convStr = sa.conviction_score ? `${sa.conviction_score}/5` : '';
+    analysisBadgeHtml = `<div class="pos-row" style="margin-top:5px;padding-top:5px;border-top:1px solid #1e293b;">
+      <span class="pos-key">S6</span>
+      <span style="display:flex;align-items:center;gap:6px;">
+        <span style="background:${dColor}22;color:${dColor};font-size:11px;font-weight:800;padding:2px 7px;border-radius:4px;letter-spacing:.03em;">${sa.s6_directive || '?'}</span>
+        ${convStr ? `<span style="color:#64748b;font-size:11px;">${convStr}</span>` : ''}
+      </span>
+    </div>`;
+  }
+
   // Open position section
   let positionHtml = '';
   if (bot.tradeState === 'Long' || bot.tradeState === 'Short') {
@@ -285,6 +301,7 @@ function renderBotCard(bot) {
       ${Number.isFinite(bot.avgEntryPrice) ? `<div class="pos-row"><span class="pos-key">Entry</span><span>${bot.avgEntryPrice.toPrecision(5)}</span></div>` : ''}
       ${Number.isFinite(bot.markPrice) ? `<div class="pos-row"><span class="pos-key">Mark</span><span>${bot.markPrice.toPrecision(5)}</span></div>` : ''}
       ${Number.isFinite(bot.unrealizedPnl) ? `<div class="pos-row"><span class="pos-key">uPnL</span><span style="color:${upnlColor};font-weight:700;">${fmtPnl(bot.unrealizedPnl)}</span></div>` : ''}
+      ${analysisBadgeHtml}
     </div>`;
   }
 
