@@ -715,9 +715,9 @@ async function handleRequest(req, res, options) {
     return;
   }
 
-  // ── S6 proxy — Signal Scout (port 8082) ──────────────────────────────────
+  // ── S6 proxy — Funnel (port 8083) ────────────────────────────────────────
   if (path === '/s6' || path.startsWith('/s6/')) {
-    proxyRequest(req, res, { targetPort: 8082, prefix: '/s6', activeTab: 's6', rewritePaths: true });
+    proxyRequest(req, res, { targetPort: 8083, prefix: '/s6', activeTab: 's6', rewritePaths: true });
     return;
   }
 
