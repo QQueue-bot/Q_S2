@@ -126,9 +126,32 @@ function renderLoginPage(error = false) {
 </html>`;
 }
 
+// ─── S6 Signal Scout helpers ─────────────────────────────────────────────────
+
+function fetchS6QueueCount() {
+  return new Promise((resolve) => {
+    const req = http.request(
+      { hostname: '127.0.0.1', port: 8082, path: '/api/queue', method: 'GET' },
+      (res) => {
+        const chunks = [];
+        res.on('data', c => chunks.push(c));
+        res.on('end', () => {
+          try {
+            const data = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+            resolve(Array.isArray(data) ? data.length : 0);
+          } catch { resolve(null); }
+        });
+      }
+    );
+    req.on('error', () => resolve(null));
+    req.setTimeout(2000, () => { req.destroy(); resolve(null); });
+    req.end();
+  });
+}
+
 // ─── Landing page ─────────────────────────────────────────────────────────────
 
-function renderLandingPage(status) {
+function renderLandingPage(status, s6QueueCount) {
   const totals = status?.totals || {};
   const portfolio = status?.portfolio || {};
   const mdx = status?.mdx || {};
@@ -184,9 +207,9 @@ function renderLandingPage(status) {
         <div class="card-sub">Not yet integrated</div>
       </a>
       <a href="/s6" class="card">
-        <div class="card-title">S6 — Funnel</div>
-        <div class="card-val" style="color:#334155;">–</div>
-        <div class="card-sub">Not yet integrated</div>
+        <div class="card-title">S6 — Signal Scout</div>
+        <div class="card-val">${s6QueueCount != null ? s6QueueCount : '–'}</div>
+        <div class="card-sub">${s6QueueCount != null ? 'signals in queue' : 'unavailable'}</div>
       </a>
     </div>
     <div class="footer">Auto-refresh 30s · ${now}</div>
@@ -758,13 +781,16 @@ async function handleRequest(req, res, options) {
 
   if (path === '/' || path === '/index.html') {
     try {
-      const status = await buildMobileBotStatus(options.mobileBotStatusOptions);
+      const [status, s6QueueCount] = await Promise.all([
+        buildMobileBotStatus(options.mobileBotStatusOptions),
+        fetchS6QueueCount(),
+      ]);
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      if (method !== 'HEAD') res.end(renderLandingPage(status));
+      if (method !== 'HEAD') res.end(renderLandingPage(status, s6QueueCount));
       else res.end();
     } catch (err) {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      if (method !== 'HEAD') res.end(renderLandingPage(null));
+      if (method !== 'HEAD') res.end(renderLandingPage(null, null));
       else res.end();
     }
     return;
