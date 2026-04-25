@@ -188,6 +188,14 @@ function createWebhookServer(options = {}) {
           }
         }
 
+        persistence.recordHeartbeatEvent({
+          received_at: new Date().toISOString(),
+          source: 'tradingview',
+          raw_input: signalInput,
+          status: 'processed',
+          details_json: JSON.stringify({ botId: parsedSignal.botId, signal: parsedSignal.signal, executionQueued: Boolean(risk.allowed && risk.actionable) }),
+        });
+
         return json(res, 200, {
           ok: true,
           validation: risk.configValidation,
@@ -205,6 +213,13 @@ function createWebhookServer(options = {}) {
           parse_ok: 0,
           raw_body: signalInput,
           error_message: error.message,
+        });
+        persistence.recordHeartbeatEvent({
+          received_at: new Date().toISOString(),
+          source: 'tradingview',
+          raw_input: String(signalInput || ''),
+          status: 'error',
+          details_json: JSON.stringify({ error: error.message }),
         });
         logger.warn('Webhook processing failure', { error: error.message, rawBody: signalInput });
         return json(res, 400, { ok: false, error: error.message });
