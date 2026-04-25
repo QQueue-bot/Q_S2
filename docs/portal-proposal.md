@@ -41,7 +41,7 @@ S4 EMA Live (`/home/ubuntu/s4_ema_live`) has no web dashboard — state lives in
 
 **How data is sourced:**
 - **Bot registry**: `fs.readFileSync` on `/home/ubuntu/.openclaw/workspace/Q_S2/config/bots.json` — read fresh on every request, no caching.
-- **DB**: hardcoded fallback `/tmp/qs2_review/data/s2.sqlite` — same DB the webhook writes to. Correct.
+- **DB**: hardcoded fallback `/tmp/qs2_review/data/s2.sqlite` in dashboard code — but the webhook process (`q-s2-webhook.service`) writes to `/home/ubuntu/.openclaw/workspace/Q_S2/data/s2.sqlite` (confirmed via `/proc/<pid>/environ`). The dashboard reads a stale rsync copy; both are in sync immediately post-deploy but diverge as the webhook appends new records. This mismatch must be resolved in Phase 4.
 - **Bybit positions**: live API calls per bot using per-bot credentials from bots.json.
 - **Heartbeat**: reads from `heartbeat_events` table via `buildPersistence`.
 
@@ -126,7 +126,7 @@ This is sufficient for a personal dashboard — the threat model is accidental e
 | System | Data source | Access method |
 |--------|------------|--------------|
 | S2 bots | `config/bots.json` + `resolveBotSettings` + Bybit API | Direct (same process) |
-| S2 DB | `/tmp/qs2_review/data/s2.sqlite` | Direct SQLite read |
+| S2 DB | `/home/ubuntu/.openclaw/workspace/Q_S2/data/s2.sqlite` | Direct SQLite read |
 | S4 classic | `/home/ubuntu/s4/s4_dashboard_data.json` | `fs.readFile` |
 | S4_2 | `/home/ubuntu/s4_2/s4_2_dashboard_data.json` | `fs.readFile` |
 | S4 EMA | `/home/ubuntu/s4_ema_live/state.json`, `trades.json` | `fs.readFile` |
@@ -270,12 +270,47 @@ S2 existing code migrated as a module into the portal. S4 and S6 sections serve 
 
 Migrate and extend current S2 dashboard into the portal:
 - Per-bot card with MDX profile, leverage, balance, open position, realised P&L (today/7d)
+- Fix DB path: portal reads from `/home/ubuntu/.openclaw/workspace/Q_S2/data/s2.sqlite` (live webhook DB, not stale /tmp copy)
 - Heartbeat implement write side: webhook pings `heartbeat_events` on each processed signal
 - Management loop status: write `management_loop_events` on each loop fire
 - Signal feed per bot (filter `normalized_signals` by bot_id)
 - Service health panel (webhook active, tunnel active, config valid)
 
+**MDX renewal panel** (prominent, top of S2 section):
+
+The S2 page opens with a renewal countdown so the operator immediately knows whether MDX needs renewing without hunting for context.
+
+- `MDX_RENEWAL_DATE` env var (format `YYYY-MM-DD`) added to `/home/ubuntu/.openclaw/.env`. Document in runbook alongside other S2 env vars.
+- Large days-remaining display, colour-coded: green (>30d) / amber (8–30d) / red (≤7d).
+- Review criteria from `docs/review-triggers-2026-05-08.md` rendered directly beneath the countdown — no context switching needed.
+- Live DB-calculated status against each criterion:
+
+| Criterion | DB query | Pass threshold |
+|-----------|----------|----------------|
+| Portfolio P&L positive | `SUM(realised_pnl)` from `exit_events` for current MDX period | > 0 |
+| Per-bot max drawdown | Max consecutive loss run per `bot_id` in `exit_events` | ≤ 25% account |
+| Win rate | `COUNT(WHERE realised_pnl > 0) / COUNT(*)` per bot | ≥ 40% |
+| Trade count | `COUNT(*)` from `exit_events` since period start | ≥ 30 |
+
+Each criterion renders as green tick / amber warning / red cross with the live value beside it. Goal: operator opens dashboard → single glance → renew or not.
+
 **Estimate:** 2–3 days.
+
+### Phase 4.5: Native Bybit SL at entry
+
+**Prerequisite before scaling to 65% margin sizing.** Must be completed before the 2026-05-08 review.
+
+S2 currently manages stop-loss entirely via internal polling (15s loop). During the 2-3 day crash (2026-04-22 to 2026-04-24), positions were naked — no exchange-side protection. This phase adds a belt-and-braces native Bybit stop order placed simultaneously with every market entry.
+
+**Implementation:**
+- In `submitEntryOrder` (`bybitExecution.js`), immediately after the entry market order fills, place a second order: `POST /v5/order/create` with `orderType: "Market"`, `triggerPrice: <sl_price>`, `triggerBy: "LastPrice"`, `reduceOnly: true`, `closeOnTrigger: true`, opposite side.
+- SL price derived from `settings.stopLoss.triggerPercent` and `entryPrice` — already available in the execution context.
+- Log the native SL order ID to `exit_events` with `exit_reason: "native_sl_placed"` so the dashboard can confirm it was set.
+- If native SL placement fails (e.g. insufficient margin for conditional order), log the error but do NOT block the entry — internal polling SL remains the fallback.
+
+**This does not replace the internal polling SL** — both run in parallel. If the position is closed by TP before the native SL triggers, the native SL order should be cancelled; add cancel logic to the TP close path.
+
+**Estimate:** 4–8 hours.
 
 ### Phase 5: S4 and S6 sections
 
@@ -285,7 +320,59 @@ S6 section: proxy calls to localhost:8082 and localhost:8083, render combined vi
 
 **Estimate:** 2 days.
 
-### Phase 6: Auth layer
+### Phase 6: Signal intelligence layer (CC async analysis)
+
+When S2 receives an entry signal and places a trade, a non-blocking analysis job is queued. The trade executes first; analysis follows asynchronously.
+
+**Flow:**
+
+1. After a successful entry order, S2 writes a job file to `/home/ubuntu/s2/data/analysis_queue/` containing: `botId`, `symbol`, `trade_id`, `signal_direction`, `timestamp`, last 100 candles of 1H OHLCV, last 100 candles of 4H OHLCV (fetched from Bybit public API at signal time, already available via `getLiveReferencePrice` infrastructure).
+2. A CC worker (persistent Claude Code session on EC2) polls the queue directory. On each job: renders a candlestick chart image using `mplfinance` (headless, no display required), runs S6-style vision analysis on the chart image, writes result back to S2 DB.
+3. Dashboard surfaces the result per trade and in aggregate stats.
+
+**DB schema additions** (new table `s6_analysis`):
+```sql
+CREATE TABLE s6_analysis (
+  id INTEGER PRIMARY KEY,
+  trade_id TEXT NOT NULL,
+  bot_id TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  signal_direction TEXT NOT NULL,
+  s6_directive TEXT NOT NULL,       -- TRADE / WAIT / AVOID / MONITOR
+  s6_conviction_score REAL,         -- 0.0–1.0
+  s6_analysis_text TEXT,
+  chart_image_path TEXT,
+  analysis_timestamp TEXT NOT NULL,
+  model_used TEXT
+);
+```
+
+**Queue watching mechanism:**
+
+Persistent Claude Code session on EC2 using `/loop` mode with a 60s poll interval. On each tick: `ls /home/ubuntu/s2/data/analysis_queue/*.json 2>/dev/null`, process any files found, move processed files to `analysis_queue/done/`. Restart-safe — unprocessed files persist across CC restarts. Alternative: systemd timer running `claude --print "process queue" every 60s` — simpler but loses conversational context between runs. Recommend persistent session for richer prompt continuity.
+
+**Chart rendering:** `mplfinance` confirmed. Headless — no DISPLAY env var needed on EC2 (uses `matplotlib` Agg backend). Install: `pip install mplfinance` in a venv alongside the CC worker. Renders to PNG at `/home/ubuntu/s2/data/charts/<trade_id>.png`. Chart shows: 1H candlesticks (100 bars), volume, 20/50 EMA overlay, entry price line, SL and TP1/TP2 levels marked.
+
+**S6 prompt variant for MDX trend-following:** The S6 Signal Scout is tuned for mean-reversion setups (score-based queue). MDX signals are trend-following (momentum breakout with ATR-based SL). The analysis prompt must be adapted: focus on trend continuation confirmation (HTF alignment, momentum, volume), not mean-reversion exhaustion signals. Prompt stored in a config file so it can be refined without code changes.
+
+**Per-bot filter mode** (`s6FilterMode` in `bots.json`):
+
+| Mode | Behaviour |
+|------|-----------|
+| `log` | Always execute. Record directive and outcome. Default for all bots. |
+| `soft` | Skip AVOID signals — all others execute. |
+| `hard` | Execute TRADE only — skip WAIT, AVOID, MONITOR. |
+
+All bots start on `log`. Move to `soft` only after 50+ closed trades show a statistically clear win-rate differential between TRADE and AVOID categories. This threshold and process is documented in `docs/review-triggers-2026-05-08.md`.
+
+**Dashboard surfaces:**
+- Per-trade: MDX signal direction, S6 directive at signal time, conviction score, chart thumbnail, trade outcome (when closed)
+- Aggregate stats view: win rate and avg P&L broken down by directive category (TRADE / WAIT / AVOID / MONITOR)
+- Per-bot filter mode badge on bot card
+
+**Estimate:** 3–4 days (CC worker + mplfinance setup + DB schema + dashboard display).
+
+### Phase 7: Auth layer
 
 Add password-protected login at `/login`. Shared `PORTAL_PASSWORD` env var. HMAC-signed session cookie. Block all routes without valid cookie.
 
@@ -297,12 +384,14 @@ Add password-protected login at `/login`. Shared `PORTAL_PASSWORD` env var. HMAC
 
 | Phase | Description | Estimate |
 |-------|-------------|----------|
-| 2 | Fix S2 stale bot registry + deploy restart | ~1 hour |
+| 2 | Fix S2 stale bot registry + deploy restart | ~1 hour ✓ done |
 | 3 | Portal framework: nav shell, landing, auth | 1–2 days |
-| 4 | Full S2 section with all requirements | 2–3 days |
+| 4 | Full S2 section + MDX renewal panel | 2–3 days |
+| 4.5 | Native Bybit SL at entry (pre-2026-05-08) | 4–8 hours |
 | 5 | S4 + S6 sections | 2 days |
-| 6 | Auth layer | 4 hours |
-| Total | | ~6–8 days |
+| 6 | Signal intelligence layer (CC async analysis) | 3–4 days |
+| 7 | Auth layer | 4 hours |
+| Total | | ~10–13 days |
 
 ---
 
