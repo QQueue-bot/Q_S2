@@ -692,46 +692,26 @@ async function handleRequest(req, res, options) {
     return;
   }
 
-  // ── S6 proxy (all methods) ────────────────────────────────────────────────
+  // ── S6 proxy — Signal Scout (port 8082) ──────────────────────────────────
   if (path === '/s6' || path.startsWith('/s6/')) {
-    proxyRequest(req, res, { targetPort: 8083, prefix: '/s6', activeTab: 's6', rewritePaths: true });
+    proxyRequest(req, res, { targetPort: 8082, prefix: '/s6', activeTab: 's6', rewritePaths: true });
     return;
   }
 
-  // ── S4 EMA Live (portal-native page + data endpoint) ─────────────────────
-  if (path === '/s4/ema-live') {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(renderEmaLivePage());
+  // ── S4 Notes API → port 8400 (before general S4 catch-all) ───────────────
+  if (path === '/s4/api/note') {
+    proxyRequest(req, res, { targetPort: 8400, prefix: '/s4', activeTab: 's4' });
     return;
   }
 
-  if (path === '/s4/ema-live/data') {
-    try {
-      const stateRaw = fs.readFileSync(`${S4_EMA_LIVE_DIR}/state.json`, 'utf8');
-      const tradesRaw = fs.readFileSync(`${S4_EMA_LIVE_DIR}/trades.json`, 'utf8');
-      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ state: JSON.parse(stateRaw), trades: JSON.parse(tradesRaw) }));
-    } catch (err) {
-      res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ error: err.message }));
-    }
-    return;
-  }
-
-  // ── S4_2 proxy (all methods, longer prefix first) ─────────────────────────
-  if (path === '/s4/s4_2' || path.startsWith('/s4/s4_2/')) {
-    proxyRequest(req, res, { targetPort: 8080, prefix: '/s4/s4_2', activeTab: 's4' });
-    return;
-  }
-
-  // ── S4 proxy (all methods) ────────────────────────────────────────────────
+  // ── S4 proxy — EMA Live Review (port 8080) ────────────────────────────────
   if (path === '/s4') {
-    res.writeHead(302, { Location: '/s4/s4_dashboard.html' });
+    res.writeHead(302, { Location: '/s4/s4_live_review.html' });
     res.end();
     return;
   }
   if (path.startsWith('/s4/')) {
-    proxyRequest(req, res, { targetPort: 80, prefix: '/s4', activeTab: 's4' });
+    proxyRequest(req, res, { targetPort: 8080, prefix: '/s4', activeTab: 's4' });
     return;
   }
 
