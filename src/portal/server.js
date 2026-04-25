@@ -72,12 +72,13 @@ function navBar(active) {
   </nav>`;
 }
 
-function pageShell(active, title, css, body) {
+function pageShell(active, title, css, body, headExtra = '') {
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  ${headExtra}
   <title>${title}</title>
   <style>${BASE_CSS}${css}</style>
 </head>
@@ -188,7 +189,7 @@ function renderLandingPage(status) {
     <div class="footer">Auto-refresh 30s · ${now}</div>
   </div>`;
 
-  return pageShell('', 'Q Portal', CSS + `<meta http-equiv="refresh" content="30">`, body);
+  return pageShell('', 'Q Portal', CSS, body, '<meta http-equiv="refresh" content="30">');
 }
 
 // ─── S2 page ──────────────────────────────────────────────────────────────────
@@ -429,7 +430,7 @@ function renderS2Page(status) {
     <div class="freshness">Auto-refresh 15s · heartbeat stale after ${heartbeat.heartbeatStaleThresholdMinutes || 360}m</div>
   </div>`;
 
-  return pageShell('s2', 'S2 — Q Portal', CSS + `<meta http-equiv="refresh" content="15">`, body);
+  return pageShell('s2', 'S2 — Q Portal', CSS, body, '<meta http-equiv="refresh" content="15">');
 }
 
 // ─── Placeholder pages ────────────────────────────────────────────────────────
