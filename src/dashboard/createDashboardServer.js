@@ -715,4 +715,5 @@ function createDashboardServer(options = {}) {
 module.exports = {
   createDashboardServer,
   renderDashboardHtml,
+  renderMobileBotStatusHtml,
 };
