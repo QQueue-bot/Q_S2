@@ -453,7 +453,7 @@ function renderS2Page(status) {
 // ─── Iframe pages ─────────────────────────────────────────────────────────────
 
 function renderIframe(section, url) {
-  const labels = { s4: 'S4 — Signal Scout', s6: 'S6 — Signal Scout' };
+  const labels = { s6: 'S6 — Signal Scout' };
   const label = labels[section] || section.toUpperCase();
   const CSS = `
     html,body{height:100%;overflow:hidden;}
@@ -461,6 +461,21 @@ function renderIframe(section, url) {
     iframe{width:100%;height:100%;border:none;display:block;}
   `;
   const body = `<div class="iframe-wrap"><iframe src="${url}" allowfullscreen></iframe></div>`;
+  return pageShell(section, `Q Portal — ${label}`, CSS, body);
+}
+
+function renderComingSoon(section, label, detail = '') {
+  const CSS = `
+    .pg{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;padding:40px 20px;text-align:center;}
+    .badge{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#64748b;margin-bottom:16px;}
+    h1{font-size:24px;font-weight:800;color:#e2e8f0;margin:0 0 10px;}
+    p{color:#64748b;font-size:14px;max-width:360px;line-height:1.6;}
+  `;
+  const body = `<div class="pg">
+    <div class="badge">${section.toUpperCase()}</div>
+    <h1>${label}</h1>
+    ${detail ? `<p>${detail}</p>` : ''}
+  </div>`;
   return pageShell(section, `Q Portal — ${label}`, CSS, body);
 }
 
@@ -545,7 +560,7 @@ async function handleRequest(req, res, options) {
 
   if (path === '/s4') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    if (method !== 'HEAD') res.end(renderIframe('s4', 'https://s4.tbotsys.one'));
+    if (method !== 'HEAD') res.end(renderComingSoon('s4', 'S4 — Coming Soon', 'S4 pump detector integration is planned for Phase 5. Check back soon.'));
     else res.end();
     return;
   }
