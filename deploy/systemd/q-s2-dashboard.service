@@ -13,6 +13,8 @@ Environment=S2_DB_PATH=/tmp/qs2_review/data/s2.sqlite
 Environment=S2_ENV_PATH=/home/ubuntu/.openclaw/.env
 # Set PORTAL_PASSWORD to enable auth (leave empty to run open)
 Environment=PORTAL_PASSWORD=
+# MDX subscription renewal date (YYYY-MM-DD) — colour-coded countdown on /s2
+Environment=MDX_RENEWAL_DATE=2026-05-25
 ExecStart=/usr/bin/env node /tmp/qs2_review/scripts/run-portal.js
 Restart=always
 RestartSec=5
