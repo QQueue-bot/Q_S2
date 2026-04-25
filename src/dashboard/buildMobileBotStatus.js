@@ -288,15 +288,15 @@ function loadBotTradeStats(db, botId) {
   }
 }
 
-function loadPortfolioReviewCriteria(db, bots) {
+function loadPortfolioReviewCriteria(db, bots, portfolioBaseline) {
   try {
     const allExits = db.prepare('SELECT exit_reason FROM exit_events').all();
     const totalExits = allExits.length;
     const totalWins = allExits.filter(e => e.exit_reason === 'take_profit').length;
     const winRate = totalExits > 0 ? totalWins / totalExits : 0;
 
-    const baseline = 400; // 8 bots × 50 USDT
-    const botBaseline = 50;
+    const baseline = portfolioBaseline || 400;
+    const botBaseline = baseline / Math.max(bots.length, 1);
     const totalBalance = bots.reduce((s, b) => s + (Number.isFinite(b.balance) ? b.balance : 0), 0);
     const worstBot = bots.reduce((worst, b) => {
       if (!Number.isFinite(b.balance)) return worst;
@@ -305,9 +305,9 @@ function loadPortfolioReviewCriteria(db, bots) {
 
     return [
       {
-        label: 'Portfolio P&L positive (last 14 days)',
+        label: 'Portfolio P&L positive',
         pass: totalBalance > baseline,
-        detail: `${totalBalance.toFixed(0)} USDT vs ${baseline} USDT baseline`,
+        detail: `${totalBalance.toFixed(0)} USDT vs ${baseline.toFixed(0)} USDT baseline`,
       },
       {
         label: 'No single bot down >25% from starting wallet',
@@ -401,7 +401,10 @@ async function buildMobileBotStatus(options = {}) {
     for (const bot of bots) {
       tradeStatsByBot[bot.botId] = loadBotTradeStats(db, bot.botId);
     }
-    reviewCriteria = loadPortfolioReviewCriteria(db, bots);
+    const portfolioBaseline = process.env.PORTFOLIO_BASELINE_USDT
+      ? Number(process.env.PORTFOLIO_BASELINE_USDT)
+      : null;
+    reviewCriteria = loadPortfolioReviewCriteria(db, bots, portfolioBaseline);
     db.close();
     botsWithStats = bots.map(bot => ({
       ...bot,
