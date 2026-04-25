@@ -249,7 +249,7 @@ function calcTradeStats(rows) {
   };
 }
 
-function loadBotTradeStats(db, botId) {
+function loadBotTradeStats(db, botId, symbol = null) {
   try {
     const todayStr = new Date(new Date().setUTCHours(0, 0, 0, 0)).toISOString();
     const sevenDaysAgoStr = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
@@ -266,11 +266,18 @@ function loadBotTradeStats(db, botId) {
       ORDER BY id DESC LIMIT 1
     `).get(botId) || null;
 
-    const lastOrder = db.prepare(`
-      SELECT created_at, signal, status, side
-      FROM order_attempts WHERE bot_id = ?
-      ORDER BY id DESC LIMIT 1
-    `).get(botId) || null;
+    // Filter by current configured symbol to exclude stale records from prior instruments
+    const lastOrder = symbol
+      ? db.prepare(`
+          SELECT created_at, signal, status, side
+          FROM order_attempts WHERE bot_id = ? AND symbol = ?
+          ORDER BY id DESC LIMIT 1
+        `).get(botId, symbol) || null
+      : db.prepare(`
+          SELECT created_at, signal, status, side
+          FROM order_attempts WHERE bot_id = ?
+          ORDER BY id DESC LIMIT 1
+        `).get(botId) || null;
 
     return {
       allTime: calcTradeStats(exits),
@@ -399,7 +406,7 @@ async function buildMobileBotStatus(options = {}) {
     initSchema(db);
     const tradeStatsByBot = {};
     for (const bot of bots) {
-      tradeStatsByBot[bot.botId] = loadBotTradeStats(db, bot.botId);
+      tradeStatsByBot[bot.botId] = loadBotTradeStats(db, bot.botId, bot.symbol);
     }
     const portfolioBaseline = process.env.PORTFOLIO_BASELINE_USDT
       ? Number(process.env.PORTFOLIO_BASELINE_USDT)
