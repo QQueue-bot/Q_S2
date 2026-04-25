@@ -148,6 +148,18 @@ function initSchema(db) {
       latency_ms INTEGER NOT NULL,
       data_available INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS native_sl_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL,
+      bot_id TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      sl_price TEXT NOT NULL,
+      sl_percent REAL,
+      side TEXT,
+      response_json TEXT
+    );
   `);
 
   const ensureColumn = (tableName, columnName, columnSql) => {
@@ -264,6 +276,14 @@ function buildPersistence(db) {
       scored_at, bot_id, symbol, signal, score, components_json, latency_ms, data_available
     ) VALUES (
       @scored_at, @bot_id, @symbol, @signal, @score, @components_json, @latency_ms, @data_available
+    )
+  `);
+
+  const insertNativeSLEvent = db.prepare(`
+    INSERT INTO native_sl_events (
+      created_at, bot_id, symbol, event_type, sl_price, sl_percent, side, response_json
+    ) VALUES (
+      @created_at, @bot_id, @symbol, @event_type, @sl_price, @sl_percent, @side, @response_json
     )
   `);
 
@@ -390,6 +410,14 @@ function buildPersistence(db) {
     },
     getRecentExitEventsForBot({ bot_id, limit }) {
       return getRecentExitEventsForBotStmt.all({ bot_id, limit });
+    },
+    recordNativeSLEvent(event) {
+      return insertNativeSLEvent.run({
+        ...event,
+        sl_percent: event.sl_percent ?? null,
+        side: event.side || null,
+        response_json: event.response_json || null,
+      });
     },
   };
 }

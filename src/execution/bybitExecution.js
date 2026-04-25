@@ -405,7 +405,7 @@ async function executeCloseOrder({ symbol, botId, livePosition, closePercent, ex
 // Called immediately after an entry order fills. Uses the reference price at entry
 // time as a proxy for fill price (market orders fill within ms of submission).
 // Position-level SL is automatically cleared by Bybit when the position closes.
-async function submitNativeSL({ symbol, side, referencePrice, stopLossPercent, tickSize, credentials, bybitBaseUrl }) {
+async function submitNativeSL({ symbol, side, referencePrice, stopLossPercent, tickSize, credentials, bybitBaseUrl, persistence, botId }) {
   const slPct = Number(stopLossPercent) || 0;
   if (slPct <= 0) {
     return { ok: false, skipped: true, reason: 'no_sl_configured' };
@@ -431,12 +431,52 @@ async function submitNativeSL({ symbol, side, referencePrice, stopLossPercent, t
   };
 
   const result = await bybitPrivatePost('/v5/position/trading-stop', payload, credentials, { bybitBaseUrl });
-  return {
-    ok: result.ok && result.json?.retCode === 0,
-    slPrice,
-    slPct,
-    response: result.json,
+  const ok = result.ok && result.json?.retCode === 0;
+
+  if (persistence?.recordNativeSLEvent) {
+    persistence.recordNativeSLEvent({
+      created_at: new Date().toISOString(),
+      bot_id: botId || 'unknown',
+      symbol,
+      event_type: 'placed',
+      sl_price: slPrice,
+      sl_percent: slPct,
+      side,
+      response_json: JSON.stringify(result.json),
+    });
+  }
+
+  return { ok, slPrice, slPct, response: result.json };
+}
+
+// Move the native position SL to break-even (avgPrice) after BE trigger fires.
+async function updateNativeSLToBreakEven({ symbol, avgPrice, side, botId, credentials, bybitBaseUrl, persistence }) {
+  const slPrice = String(avgPrice);
+  const payload = {
+    category: 'linear',
+    symbol,
+    stopLoss: slPrice,
+    slTriggerBy: 'LastPrice',
+    positionIdx: 0,
   };
+
+  const result = await bybitPrivatePost('/v5/position/trading-stop', payload, credentials, { bybitBaseUrl });
+  const ok = result.ok && result.json?.retCode === 0;
+
+  if (persistence?.recordNativeSLEvent) {
+    persistence.recordNativeSLEvent({
+      created_at: new Date().toISOString(),
+      bot_id: botId || 'unknown',
+      symbol,
+      event_type: 'be_update',
+      sl_price: slPrice,
+      sl_percent: 0,
+      side: side || null,
+      response_json: JSON.stringify(result.json),
+    });
+  }
+
+  return { ok, slPrice, response: result.json };
 }
 
 async function submitEntryOrder({ symbol, side, qty, botId, signal, notionalUsd, credentials, persistence, stageName = 'initial_entry', bybitBaseUrl }) {
@@ -589,6 +629,8 @@ async function executePaperTrade(parsedSignal, options = {}) {
       tickSize,
       credentials,
       bybitBaseUrl,
+      persistence,
+      botId: parsedSignal.botId,
     });
   }
 
@@ -803,7 +845,19 @@ async function manageBreakEven(options = {}) {
       level_name: 'BE',
       details_json: JSON.stringify({ trigger_percent: Number(decision.triggerPercent) }),
     });
-    return { ok: true, action: 'armed', dbPath, decision, tradeId };
+
+    // Phase 4.5: move native SL to entry price (break-even) when BE arms
+    const beSlResult = await updateNativeSLToBreakEven({
+      symbol,
+      avgPrice: livePosition.avgPrice,
+      side: livePosition.side,
+      botId: botContext.botId,
+      credentials,
+      bybitBaseUrl,
+      persistence,
+    });
+
+    return { ok: true, action: 'armed', dbPath, decision, tradeId, beSlResult };
   }
 
   const closeActionKey = 'BE_CLOSE';
