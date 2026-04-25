@@ -450,17 +450,17 @@ function renderS2Page(status) {
   return pageShell('s2', 'S2 — Q Portal', CSS, body, '<meta http-equiv="refresh" content="15">');
 }
 
-// ─── Placeholder pages ────────────────────────────────────────────────────────
+// ─── Iframe pages ─────────────────────────────────────────────────────────────
 
-function renderPlaceholder(section) {
-  const labels = { s4: 'S4 — Signal Scout', s6: 'S6 — Funnel' };
+function renderIframe(section, url) {
+  const labels = { s4: 'S4 — Signal Scout', s6: 'S6 — Signal Scout' };
   const label = labels[section] || section.toUpperCase();
   const CSS = `
-    .pg{padding:40px 20px;max-width:480px;margin:0 auto;text-align:center;}
-    h1{font-size:20px;font-weight:700;color:#93c5fd;margin:0 0 12px;}
-    p{color:#64748b;font-size:14px;}
+    html,body{height:100%;overflow:hidden;}
+    .iframe-wrap{position:fixed;top:41px;left:0;right:0;bottom:0;}
+    iframe{width:100%;height:100%;border:none;display:block;}
   `;
-  const body = `<div class="pg"><h1>${label}</h1><p>Integration coming in Phase 5. Data for this system lives on a separate server and will be proxied here.</p></div>`;
+  const body = `<div class="iframe-wrap"><iframe src="${url}" allowfullscreen></iframe></div>`;
   return pageShell(section, `Q Portal — ${label}`, CSS, body);
 }
 
@@ -545,14 +545,14 @@ async function handleRequest(req, res, options) {
 
   if (path === '/s4') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    if (method !== 'HEAD') res.end(renderPlaceholder('s4'));
+    if (method !== 'HEAD') res.end(renderIframe('s4', 'https://s4.tbotsys.one'));
     else res.end();
     return;
   }
 
   if (path === '/s6') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    if (method !== 'HEAD') res.end(renderPlaceholder('s6'));
+    if (method !== 'HEAD') res.end(renderIframe('s6', 'https://s6.tbotsys.one'));
     else res.end();
     return;
   }
