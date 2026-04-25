@@ -6,7 +6,6 @@ After=network.target
 Type=oneshot
 User=ubuntu
 Environment=S2_DB_PATH=/home/ubuntu/.openclaw/workspace/Q_S2/data/s2.sqlite
-EnvironmentFile=-/home/ubuntu/.openclaw/.env
 ExecStart=/usr/bin/python3 /tmp/qs2_review/scripts/process_analysis_queue.py
 StandardOutput=journal
 StandardError=journal

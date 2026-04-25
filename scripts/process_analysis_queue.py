@@ -2,15 +2,15 @@
 """
 Phase 6 signal intelligence processor.
 Reads pending jobs from /home/ubuntu/s2/data/analysis_queue/,
-renders 1H candlestick charts, runs Claude vision analysis,
+renders 1H candlestick charts, runs vision analysis via Claude Code CLI,
 writes results to signal_analysis table in S2 SQLite DB.
 """
 
 import os
 import sys
 import json
-import base64
 import sqlite3
+import subprocess
 import traceback
 from pathlib import Path
 from datetime import datetime
@@ -22,7 +22,6 @@ matplotlib.use('Agg')
 QUEUE_DIR = Path('/home/ubuntu/s2/data/analysis_queue')
 CHART_DIR = Path('/home/ubuntu/s2/data/charts')
 DB_PATH = os.environ.get('S2_DB_PATH', '/home/ubuntu/.openclaw/workspace/Q_S2/data/s2.sqlite')
-ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 
 
 def ensure_db_table(db_path):
@@ -72,67 +71,39 @@ def render_chart(candles, job_id, side, symbol):
 
 
 def run_vision_analysis(chart_path, side, entry_price, symbol):
-    import urllib.request
-    import urllib.error
-
-    if not ANTHROPIC_API_KEY:
-        print('ANTHROPIC_API_KEY not set — skipping vision analysis')
-        return None
-
-    with open(chart_path, 'rb') as f:
-        image_b64 = base64.b64encode(f.read()).decode('utf-8')
-
+    """Invoke claude -p with Read tool to analyse the chart image. No API key required."""
     direction = 'LONG' if side == 'Buy' else 'SHORT'
     prompt = (
-        f'You are a professional technical analyst reviewing a 1H candlestick chart.\n'
-        f'A {direction} trade was just entered on {symbol} at {entry_price}.\n\n'
-        f'Analyse the chart and respond with JSON only (no markdown, no explanation):\n'
-        f'{{"directive":"<TRADE|WAIT|AVOID|MONITOR>","conviction":<1-5>,"analysis":"<2-3 sentences>"}}\n\n'
-        f'Directive meanings:\n'
-        f'TRADE — strong setup, trend/momentum aligns with entry direction\n'
-        f'WAIT — developing but needs more confirmation\n'
-        f'AVOID — counter-trend, weak momentum, or high-risk setup\n'
-        f'MONITOR — neutral/unclear, watch next few candles'
+        f'Read the candlestick chart image at {chart_path}. '
+        f'A {direction} trade was just entered on {symbol} at {entry_price}. '
+        f'Analyse the chart technically. Output JSON only — no markdown, no explanation:\n'
+        f'{{"directive":"TRADE","conviction":4,"analysis":"your assessment here"}}\n\n'
+        f'directive must be exactly one of:\n'
+        f'TRADE — momentum and trend align with the entry direction, clear setup\n'
+        f'WAIT — setup developing but needs more candle confirmation\n'
+        f'AVOID — counter-trend, exhaustion, or structurally weak entry\n'
+        f'MONITOR — neutral/unclear, watch next few candles before sizing up\n'
+        f'conviction is an integer 1 (low) to 5 (high). analysis is 2-3 sentences.'
     )
 
-    payload = {
-        'model': 'claude-opus-4-7',
-        'max_tokens': 300,
-        'messages': [{
-            'role': 'user',
-            'content': [
-                {
-                    'type': 'image',
-                    'source': {
-                        'type': 'base64',
-                        'media_type': 'image/png',
-                        'data': image_b64,
-                    },
-                },
-                {'type': 'text', 'text': prompt},
-            ],
-        }],
-    }
-
-    req = urllib.request.Request(
-        'https://api.anthropic.com/v1/messages',
-        data=json.dumps(payload).encode('utf-8'),
-        headers={
-            'x-api-key': ANTHROPIC_API_KEY,
-            'anthropic-version': '2023-06-01',
-            'content-type': 'application/json',
-        },
-        method='POST',
+    result = subprocess.run(
+        ['claude', '-p', prompt, '--allowedTools', 'Read', '--output-format', 'json'],
+        capture_output=True,
+        text=True,
+        timeout=90,
     )
 
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        data = json.loads(resp.read())
+    if result.returncode != 0:
+        raise RuntimeError(f'claude exited {result.returncode}: {result.stderr[:300]}')
 
-    text = data['content'][0]['text'].strip()
-    # Strip markdown code fences if model adds them despite instructions
+    # claude --output-format json wraps output in {"result": "...", ...}
+    outer = json.loads(result.stdout)
+    text = outer.get('result', result.stdout).strip()
+
+    # Strip markdown fences if model adds them despite instructions
     if text.startswith('```'):
         lines = text.split('\n')
-        text = '\n'.join(lines[1:-1] if lines[-1] == '```' else lines[1:])
+        text = '\n'.join(lines[1:-1] if lines[-1].strip() == '```' else lines[1:])
 
     return json.loads(text.strip())
 
@@ -165,7 +136,7 @@ def process_job(job_path):
 
     print(f'[{datetime.utcnow().isoformat()}] Processing {job_id} ({symbol} {side} @ {entry_price})')
 
-    # Mark as processing to prevent concurrent run from picking it up
+    # Mark as processing to prevent concurrent runs picking it up
     job['status'] = 'processing'
     with open(job_path, 'w') as f:
         json.dump(job, f, indent=2)
@@ -176,25 +147,24 @@ def process_job(job_path):
 
         result = run_vision_analysis(chart_path, side, entry_price, symbol)
 
-        if result:
-            directive = result.get('directive', 'MONITOR')
-            conviction = int(result.get('conviction', 3))
-            analysis_text = result.get('analysis', '')
-            print(f'  Analysis: {directive} ({conviction}/5) — {analysis_text[:100]}')
-        else:
-            directive = conviction = analysis_text = None
+        directive = result.get('directive', 'MONITOR')
+        conviction = int(result.get('conviction', 3))
+        analysis_text = result.get('analysis', '')
+        print(f'  Analysis: {directive} ({conviction}/5) — {analysis_text[:100]}')
 
         write_db_result(trade_id, bot_id, symbol, directive, conviction, analysis_text, chart_path)
 
         job['status'] = 'done'
         job['chart_path'] = str(chart_path)
-        if directive:
-            job['directive'] = directive
-            job['conviction'] = conviction
+        job['directive'] = directive
+        job['conviction'] = conviction
 
     except Exception as e:
         print(f'  ERROR: {e}')
         traceback.print_exc()
+        # Still write chart path to DB even if analysis failed
+        chart_path_str = str(CHART_DIR / f'{job_id}.png') if (CHART_DIR / f'{job_id}.png').exists() else None
+        write_db_result(trade_id, bot_id, symbol, None, None, None, chart_path_str)
         job['status'] = 'error'
         job['error'] = str(e)
 
