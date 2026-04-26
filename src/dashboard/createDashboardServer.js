@@ -225,6 +225,62 @@ function renderExecutionTimeline(events = []) {
   return `<div class="signal-list">${items}</div>`;
 }
 
+function loadTradeAssessments(dbPath) {
+  try {
+    const db = new Database(dbPath, { readonly: true });
+    const hasTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='trade_assessments'").get();
+    if (!hasTable) { db.close(); return { rows: [], pendingCount: 0 }; }
+    const rows = db.prepare('SELECT * FROM trade_assessments ORDER BY id DESC LIMIT 30').all();
+    const pendingCount = rows.filter(r => !r.post_trade_text).length;
+    db.close();
+    return { rows, pendingCount };
+  } catch {
+    return { rows: [], pendingCount: 0 };
+  }
+}
+
+function renderTradeAssessmentsPanel({ rows = [], pendingCount = 0 } = {}) {
+  const banner = pendingCount > 0
+    ? `<div class="assessment-pending-banner">&#128203; ${pendingCount} trade${pendingCount > 1 ? 's' : ''} awaiting post-trade review — share Bybit charts to complete assessment</div>`
+    : '';
+
+  if (!rows.length) {
+    return `${banner}<p>No trade assessments logged yet.</p>`;
+  }
+
+  const cards = rows.map(r => {
+    const isPending = !r.post_trade_text;
+    const direction = r.direction || '—';
+    const score = r.s3_score !== null && r.s3_score !== undefined ? `${r.s3_score}/100` : 'n/a';
+    const entryShort = (r.entry_time || '').slice(0, 16).replace('T', ' ');
+    const statusBadge = isPending
+      ? '<span class="assessment-badge assessment-open">OPEN — pending review</span>'
+      : `<span class="assessment-badge assessment-closed">CLOSED ${r.actual_pnl_pct !== null && r.actual_pnl_pct !== undefined ? (r.actual_pnl_pct >= 0 ? '+' : '') + Number(r.actual_pnl_pct).toFixed(2) + '%' : ''}</span>`;
+
+    const postSection = !isPending ? `
+      <div class="assessment-divider"></div>
+      <div class="assessment-label">Post-trade</div>
+      <div class="assessment-body">${r.post_trade_text || ''}</div>
+      ${r.exit_reason ? `<div><span class="label">Exit:</span> <code>${r.exit_reason}${r.exit_time ? ' @ ' + r.exit_time.slice(0, 16).replace('T', ' ') : ''}</code></div>` : ''}
+    ` : '';
+
+    return `
+      <div class="signal-item assessment-card ${isPending ? 'assessment-card-open' : 'assessment-card-closed'}">
+        <div class="assessment-header">
+          <span class="assessment-title">${r.bot_id} · ${r.symbol} · ${direction}</span>
+          ${statusBadge}
+        </div>
+        <div><span class="label">Entry:</span> <code>${entryShort} UTC</code> &nbsp; <span class="label">S3:</span> <code>${score}</code></div>
+        <div class="assessment-label">Pre-trade</div>
+        <div class="assessment-body">${r.pre_trade_text || ''}</div>
+        ${postSection}
+      </div>
+    `;
+  }).join('\n');
+
+  return `${banner}<div class="signal-list">${cards}</div>`;
+}
+
 function loadHealthState(runtime) {
   const state = {
     runtimePath: runtime.path || '/tmp/qs2_review',
@@ -458,8 +514,13 @@ function renderMobileBotStatusHtml(status = {}) {
 </html>`;
 }
 
-function renderDashboardHtml({ title = 'S2 Dashboard', runtime = {}, signals = [], positionState = {}, executionEvents = [], latestSummary = null, healthState = null } = {}) {
+function renderDashboardHtml({ title = 'S2 Dashboard', runtime = {}, signals = [], positionState = {}, executionEvents = [], latestSummary = null, healthState = null, tradeAssessments = null } = {}) {
   const sections = [
+    {
+      id: 'assessments',
+      title: 'Trade Assessment Log',
+      body: renderTradeAssessmentsPanel(tradeAssessments || {}),
+    },
     {
       id: 'signals',
       title: 'Recent Signals',
@@ -590,6 +651,27 @@ function renderDashboardHtml({ title = 'S2 Dashboard', runtime = {}, signals = [
     h2 { font-size: 16px; margin-bottom: 10px; }
     p { color: #cbd5e1; line-height: 1.5; }
     code { color: #f9a8d4; }
+    .assessment-pending-banner {
+      background: #451a03;
+      border: 1px solid #92400e;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 12px;
+      color: #fcd34d;
+      font-weight: 600;
+      font-size: 13px;
+    }
+    .assessment-card { gap: 6px; }
+    .assessment-card-open { border-color: #92400e; }
+    .assessment-card-closed { border-color: #14532d; }
+    .assessment-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; }
+    .assessment-title { font-weight: 700; font-size: 14px; }
+    .assessment-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+    .assessment-open { background: #451a03; color: #fcd34d; }
+    .assessment-closed { background: #14532d; color: #86efac; }
+    .assessment-label { font-size: 11px; color: #93c5fd; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+    .assessment-body { font-size: 12px; color: #cbd5e1; line-height: 1.5; white-space: pre-wrap; }
+    .assessment-divider { border: none; border-top: 1px solid #1f2937; margin: 6px 0; }
   </style>
 </head>
 <body>
@@ -686,7 +768,8 @@ function createDashboardServer(options = {}) {
       settingsPath: runtime.settingsPath || '/tmp/qs2_review/config/settings.json',
       path: runtime.path || '/tmp/qs2_review',
     });
-    const html = renderDashboardHtml({ title, runtime, signals, positionState, executionEvents, latestSummary, healthState });
+    const tradeAssessments = loadTradeAssessments(signalDbPath);
+    const html = renderDashboardHtml({ title, runtime, signals, positionState, executionEvents, latestSummary, healthState, tradeAssessments });
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     if (req.method === 'HEAD') {
       res.end();

@@ -161,6 +161,24 @@ function initSchema(db) {
       response_json TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS trade_assessments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL,
+      bot_id TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      signal TEXT NOT NULL,
+      direction TEXT NOT NULL,
+      entry_time TEXT NOT NULL,
+      s3_score INTEGER,
+      s3_components_json TEXT,
+      pre_trade_text TEXT NOT NULL,
+      exit_time TEXT,
+      actual_pnl_pct REAL,
+      exit_reason TEXT,
+      post_trade_text TEXT,
+      reviewed_at TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS signal_analysis (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       trade_id TEXT NOT NULL UNIQUE,
@@ -430,6 +448,38 @@ function buildPersistence(db) {
         side: event.side || null,
         response_json: event.response_json || null,
       });
+    },
+    insertTradeAssessment(row) {
+      return db.prepare(`
+        INSERT INTO trade_assessments (
+          created_at, bot_id, symbol, signal, direction, entry_time,
+          s3_score, s3_components_json, pre_trade_text
+        ) VALUES (
+          @created_at, @bot_id, @symbol, @signal, @direction, @entry_time,
+          @s3_score, @s3_components_json, @pre_trade_text
+        )
+      `).run({
+        s3_score: row.s3_score ?? null,
+        s3_components_json: row.s3_components_json ?? null,
+        ...row,
+      });
+    },
+    updatePostTradeAssessment({ id, exit_time, actual_pnl_pct, exit_reason, post_trade_text, reviewed_at }) {
+      return db.prepare(`
+        UPDATE trade_assessments
+        SET exit_time = @exit_time,
+            actual_pnl_pct = @actual_pnl_pct,
+            exit_reason = @exit_reason,
+            post_trade_text = @post_trade_text,
+            reviewed_at = @reviewed_at
+        WHERE id = @id
+      `).run({ id, exit_time, actual_pnl_pct, exit_reason, post_trade_text, reviewed_at });
+    },
+    getTradeAssessments(limit = 20) {
+      return db.prepare('SELECT * FROM trade_assessments ORDER BY id DESC LIMIT ?').all(limit);
+    },
+    getPendingTradeAssessments() {
+      return db.prepare('SELECT * FROM trade_assessments WHERE post_trade_text IS NULL ORDER BY id DESC').all();
     },
   };
 }
