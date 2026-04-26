@@ -126,6 +126,62 @@ function renderLoginPage(error = false) {
 </html>`;
 }
 
+// ─── Trade assessment helpers ─────────────────────────────────────────────────
+
+function loadTradeAssessments(dbPath) {
+  try {
+    const Database = require('better-sqlite3');
+    const db = new Database(dbPath, { readonly: true });
+    const hasTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='trade_assessments'").get();
+    if (!hasTable) { db.close(); return { rows: [], pendingCount: 0 }; }
+    const rows = db.prepare('SELECT * FROM trade_assessments ORDER BY id DESC LIMIT 30').all();
+    const pendingCount = rows.filter(r => !r.post_trade_text).length;
+    db.close();
+    return { rows, pendingCount };
+  } catch {
+    return { rows: [], pendingCount: 0 };
+  }
+}
+
+function renderTradeAssessmentsPanel({ rows = [], pendingCount = 0 } = {}) {
+  const banner = pendingCount > 0
+    ? `<div class="ta-banner">&#128203; ${pendingCount} trade${pendingCount > 1 ? 's' : ''} awaiting post-trade review — share Bybit charts to complete assessment</div>`
+    : '';
+
+  if (!rows.length) {
+    return `${banner}<div class="ta-empty">No trade assessments logged yet.</div>`;
+  }
+
+  const cards = rows.map(r => {
+    const isPending = !r.post_trade_text;
+    const score = r.s3_score !== null && r.s3_score !== undefined ? `${r.s3_score}/100` : 'n/a';
+    const entryShort = (r.entry_time || '').slice(0, 16).replace('T', ' ');
+    const badge = isPending
+      ? `<span class="ta-badge ta-open">OPEN</span>`
+      : `<span class="ta-badge ta-closed">CLOSED ${r.actual_pnl_pct !== null && r.actual_pnl_pct !== undefined ? (r.actual_pnl_pct >= 0 ? '+' : '') + Number(r.actual_pnl_pct).toFixed(2) + '%' : ''}</span>`;
+
+    const postSection = !isPending ? `
+      <div class="ta-divider"></div>
+      <div class="ta-lbl">Post-trade</div>
+      <div class="ta-body">${r.post_trade_text || ''}</div>
+      ${r.exit_reason ? `<div class="ta-meta">Exit: ${r.exit_reason}${r.exit_time ? ' @ ' + r.exit_time.slice(0, 16).replace('T', ' ') : ''}</div>` : ''}
+    ` : '';
+
+    return `<div class="ta-card ${isPending ? 'ta-card-open' : 'ta-card-closed'}">
+      <div class="ta-header">
+        <span class="ta-title">${r.bot_id} · ${r.symbol} · ${r.direction}</span>
+        ${badge}
+      </div>
+      <div class="ta-meta">Entry: ${entryShort} UTC &nbsp;·&nbsp; S3: ${score}</div>
+      <div class="ta-lbl">Pre-trade assessment</div>
+      <div class="ta-body">${r.pre_trade_text || ''}</div>
+      ${postSection}
+    </div>`;
+  }).join('\n');
+
+  return `${banner}<div class="ta-list">${cards}</div>`;
+}
+
 // ─── S6 Signal Scout helpers ─────────────────────────────────────────────────
 
 function fetchS6QueueCount() {
@@ -370,7 +426,7 @@ function renderBotCard(bot) {
   </div>`;
 }
 
-function renderS2Page(status) {
+function renderS2Page(status, tradeAssessments) {
   const totals = status.totals || {};
   const bots = Array.isArray(status.bots) ? status.bots : [];
   const heartbeat = status.heartbeat || {};
@@ -379,6 +435,7 @@ function renderS2Page(status) {
   const mdxPanel = renderMdxPanel(status.mdx || null, status.reviewCriteria || []);
   const healthPanel = renderServiceHealthPanel(status.serviceHealth || null);
   const botCards = bots.map(renderBotCard).join('\n');
+  const assessmentPanel = renderTradeAssessmentsPanel(tradeAssessments || {});
 
   const CSS = `
     .wrap{padding:12px;max-width:480px;margin:0 auto;}
@@ -436,6 +493,23 @@ function renderS2Page(status) {
     /* Misc */
     .generated{font-size:12px;opacity:.6;text-align:center;margin-top:12px;}
     .freshness{font-size:12px;text-align:center;margin-top:6px;color:#93c5fd;}
+    /* Trade assessments */
+    .ta-section-head{font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin:14px 0 8px;}
+    .ta-banner{background:#451a03;border:1px solid #92400e;border-radius:10px;padding:10px 14px;margin-bottom:10px;color:#fcd34d;font-weight:600;font-size:13px;}
+    .ta-empty{font-size:13px;color:#475569;padding:8px 0;}
+    .ta-list{display:flex;flex-direction:column;gap:8px;}
+    .ta-card{background:#0f172a;border:1px solid #1f2937;border-radius:10px;padding:10px 12px;display:grid;gap:5px;}
+    .ta-card-open{border-color:#92400e;}
+    .ta-card-closed{border-color:#14532d;}
+    .ta-header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;}
+    .ta-title{font-size:13px;font-weight:700;}
+    .ta-badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;}
+    .ta-open{background:#451a03;color:#fcd34d;}
+    .ta-closed{background:#14532d;color:#86efac;}
+    .ta-lbl{font-size:10px;color:#93c5fd;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-top:3px;}
+    .ta-body{font-size:12px;color:#94a3b8;line-height:1.5;white-space:pre-wrap;}
+    .ta-meta{font-size:11px;color:#475569;}
+    .ta-divider{border:none;border-top:1px solid #1e293b;margin:4px 0;}
   `;
 
   const body = `<div class="wrap">
@@ -469,6 +543,8 @@ function renderS2Page(status) {
       </div>
     </div>
     <div class="bot-list">${botCards || '<div class="bot-card">No bots found.</div>'}</div>
+    <div class="ta-section-head">Trade Assessment Log</div>
+    ${assessmentPanel}
     <div class="generated">Updated ${status.generatedAt || 'n/a'}</div>
     <div class="freshness">Auto-refresh 15s · heartbeat stale after ${heartbeat.heartbeatStaleThresholdMinutes || 360}m</div>
   </div>`;
@@ -772,8 +848,12 @@ async function handleRequest(req, res, options) {
 
   if (path === '/s2') {
     try {
-      const status = await buildMobileBotStatus(options.mobileBotStatusOptions);
-      const html = renderS2Page(status);
+      const dbPath = (options.mobileBotStatusOptions || {}).dbPath || '/tmp/qs2_review/data/s2.sqlite';
+      const [status, tradeAssessments] = await Promise.all([
+        buildMobileBotStatus(options.mobileBotStatusOptions),
+        Promise.resolve(loadTradeAssessments(dbPath)),
+      ]);
+      const html = renderS2Page(status, tradeAssessments);
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       if (method !== 'HEAD') res.end(html);
       else res.end();
