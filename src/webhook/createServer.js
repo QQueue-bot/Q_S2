@@ -5,7 +5,7 @@ const { parseSignalString } = require('../signals/parseSignal');
 const { loadAndValidateSettings } = require('../config/validateSettings');
 const { resolveBotContext } = require('../config/resolveBotContext');
 const { createRiskEngine } = require('../risk/evaluateSignal');
-const { executePaperTrade } = require('../execution/bybitExecution');
+const { executePaperTrade, executeSignalClose } = require('../execution/bybitExecution');
 const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite');
 const { computeS3Score } = require('../scoring/computeS3Score');
 
@@ -141,6 +141,8 @@ function createWebhookServer(options = {}) {
         const risk = riskEngine.evaluate(parsedSignal);
         logger.info('Risk evaluation result', { risk });
 
+        const isExitSignal = parsedSignal.signal === 'EXIT_LONG' || parsedSignal.signal === 'EXIT_SHORT';
+
         if (risk.allowed && risk.actionable) {
           setImmediate(async () => {
             try {
@@ -188,12 +190,30 @@ function createWebhookServer(options = {}) {
           }
         }
 
+        if (risk.allowed && isExitSignal) {
+          setImmediate(async () => {
+            try {
+              const exitResult = await executeSignalClose(parsedSignal, {
+                settingsPath: botContext.settingsPath,
+                botContext,
+                envPath: '/home/ubuntu/.openclaw/.env',
+              });
+              logger.info('Signal exit result', { exitResult });
+            } catch (exitError) {
+              logger.warn('Background exit failure', {
+                error: exitError.message,
+                parsedSignal,
+              });
+            }
+          });
+        }
+
         persistence.recordHeartbeatEvent({
           received_at: new Date().toISOString(),
           source: 'tradingview',
           raw_input: signalInput,
           status: 'processed',
-          details_json: JSON.stringify({ botId: parsedSignal.botId, signal: parsedSignal.signal, executionQueued: Boolean(risk.allowed && risk.actionable) }),
+          details_json: JSON.stringify({ botId: parsedSignal.botId, signal: parsedSignal.signal, executionQueued: Boolean(risk.allowed && risk.actionable), exitQueued: Boolean(risk.allowed && isExitSignal) }),
         });
 
         return json(res, 200, {
@@ -202,6 +222,7 @@ function createWebhookServer(options = {}) {
           parsedSignal,
           risk,
           executionQueued: Boolean(risk.allowed && risk.actionable),
+          exitQueued: Boolean(risk.allowed && isExitSignal),
           tradingEnabled: Boolean(botContext.settings?.trading?.enabled),
         });
       } catch (error) {

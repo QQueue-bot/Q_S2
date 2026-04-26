@@ -120,9 +120,12 @@ function validateSettingsObject(settings) {
   const sl = settings.stopLoss;
   checkType(sl, 'object', 'settings.stopLoss', issues);
   if (isPlainObject(sl)) {
-    checkUnknownKeys(sl, ['enabled', 'triggerPercent', 'notes'], 'settings.stopLoss', issues);
+    checkUnknownKeys(sl, ['enabled', 'triggerPercent', 'safetyMarginPercent', 'notes'], 'settings.stopLoss', issues);
     if (typeof sl.enabled !== 'boolean') addIssue(issues, 'error', 'settings.stopLoss.enabled', 'Must be boolean');
     if (typeof sl.triggerPercent !== 'number' || sl.triggerPercent < 0) addIssue(issues, 'error', 'settings.stopLoss.triggerPercent', 'Must be >= 0');
+    if ('safetyMarginPercent' in sl && (typeof sl.safetyMarginPercent !== 'number' || sl.safetyMarginPercent < 0)) {
+      addIssue(issues, 'error', 'settings.stopLoss.safetyMarginPercent', 'Must be >= 0');
+    }
   }
 
   const be = settings.breakEven;

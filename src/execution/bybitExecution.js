@@ -654,16 +654,20 @@ async function executePaperTrade(parsedSignal, options = {}) {
     response_json: JSON.stringify(firstEntry.response),
   });
 
-  // Phase 4.5: place native position-level SL immediately after initial entry fills
+  // Phase 4.5: place native position-level SL immediately after initial entry fills.
+  // Native SL = MDX strategy SL + safetyMarginPercent — acts as last-resort exchange-level
+  // protection if software management fails. Software TP/SL/BE loop uses MDX SL directly.
   let nativeSl = null;
   if (firstEntry.ok) {
-    const slPct = botContext.settings?.stopLoss?.triggerPercent || 0;
+    const mdxSlPct = Number(botContext.settings?.stopLoss?.triggerPercent) || 0;
+    const safetyMargin = Number(botContext.settings?.stopLoss?.safetyMarginPercent) || 0;
+    const nativeSlPct = mdxSlPct > 0 ? mdxSlPct + safetyMargin : 0;
     const tickSize = instrument.priceFilter?.tickSize || '0.0001';
     nativeSl = await submitNativeSL({
       symbol,
       side,
       referencePrice: Number(latestTick.last_price),
-      stopLossPercent: slPct,
+      stopLossPercent: nativeSlPct,
       tickSize,
       credentials,
       bybitBaseUrl,
@@ -1061,8 +1065,63 @@ async function manageTpSl(options = {}) {
   };
 }
 
+// Close the full live position for a given bot in response to a TradingView EXIT signal.
+// Only closes if a position exists in the direction matching the signal.
+async function executeSignalClose(parsedSignal, options = {}) {
+  const settingsPath = options.settingsPath || path.join(__dirname, '..', '..', 'config', 'settings.json');
+  const envPath = options.envPath || path.join(__dirname, '..', '..', '.env');
+  loadProjectEnv(envPath);
+
+  const botContext = options.botContext || resolveBotContext(parsedSignal.botId, { envPath });
+  const apiKey = botContext.credentials.apiKey;
+  const apiSecret = botContext.credentials.apiSecret;
+  if (!apiKey || !apiSecret) {
+    throw new Error(`Missing resolved live credentials for ${parsedSignal.botId}`);
+  }
+
+  const { settings } = loadAndValidateSettings(settingsPath);
+  const { persistence } = resolvePersistence(options, settingsPath, settings);
+
+  const symbol = botContext.symbol;
+  const bybitBaseUrl = options.bybitBaseUrl || 'https://api.bybit.com';
+  const credentials = { apiKey, apiSecret };
+
+  const livePosition = await getLivePosition(symbol, credentials, { bybitBaseUrl });
+  if (!livePosition) {
+    return { ok: true, action: 'no_position', symbol, signal: parsedSignal.signal };
+  }
+
+  const expectedSide = parsedSignal.signal === 'EXIT_LONG' ? 'Buy' : 'Sell';
+  if (livePosition.side !== expectedSide) {
+    return { ok: true, action: 'direction_mismatch', symbol, signal: parsedSignal.signal, positionSide: livePosition.side };
+  }
+
+  const closeResult = await executeCloseOrder({
+    symbol,
+    botId: parsedSignal.botId,
+    livePosition,
+    closePercent: 100,
+    exitReason: 'signal_exit',
+    triggerPercent: 0,
+    credentials,
+    persistence,
+    bybitBaseUrl,
+  });
+
+  return {
+    ok: closeResult.ok,
+    action: 'signal_exit',
+    symbol,
+    signal: parsedSignal.signal,
+    side: livePosition.side,
+    size: livePosition.size,
+    closeResult,
+  };
+}
+
 module.exports = {
   executePaperTrade,
+  executeSignalClose,
   manageTpSl,
   manageBreakEven,
   computeOrderSizing,

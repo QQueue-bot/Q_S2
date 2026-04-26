@@ -85,7 +85,8 @@
   "stopLoss": {
     "enabled": true,
     "triggerPercent": 0.0,
-    "notes": "Measured as percentage move from entry price. Zero is a placeholder only."
+    "safetyMarginPercent": 1.0,
+    "notes": "triggerPercent is overridden per-bot by MDX profile at runtime. safetyMarginPercent is added on top of the MDX SL to set the Bybit native position-level stop — the last-resort safety net if software management fails."
   },
   "breakEven": {
     "enabled": true,
