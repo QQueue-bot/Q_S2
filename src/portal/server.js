@@ -569,6 +569,7 @@ function injectPortalNav(html, activeTab) {
 </div>
 <style>body{padding-top:41px!important;}.navbar.sticky-top,.navbar.fixed-top,.sticky-top{top:41px!important;}</style>`;
 
+  if (html.includes('id="q-portal-nav"')) return html;
   if (/<body[\s>]/i.test(html)) {
     return html.replace(/<body([^>]*)>/i, `<body$1>\n${nav}`);
   }
