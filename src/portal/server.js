@@ -640,7 +640,11 @@ function proxyRequest(req, res, { targetPort, prefix, activeTab, rewritePaths = 
       upstreamRes.on('end', () => {
         let html = Buffer.concat(chunks).toString('utf8');
         if (rewritePaths) html = rewriteHtmlPaths(html, prefix);
-        html = injectPortalNav(html, activeTab);
+        // Skip nav injection when request comes from inside an iframe (already has portal nav on outer page)
+        const fetchDest = req.headers['sec-fetch-dest'] || '';
+        if (fetchDest !== 'iframe' && fetchDest !== 'frame') {
+          html = injectPortalNav(html, activeTab);
+        }
         const buf = Buffer.from(html, 'utf8');
         headers['content-length'] = buf.length;
         res.writeHead(status, headers);
@@ -727,7 +731,7 @@ function renderEmaLivePage() {
 // ─── Iframe pages ─────────────────────────────────────────────────────────────
 
 function renderIframe(section, url) {
-  const labels = { s6: 'S6 — Signal Scout' };
+  const labels = { s4: 'S4 — EMA Live', s6: 'S6 — Signal Scout' };
   const label = labels[section] || section.toUpperCase();
   const CSS = `
     html,body{height:100%;overflow:hidden;}
@@ -792,10 +796,10 @@ async function handleRequest(req, res, options) {
     return;
   }
 
-  // ── S6 proxy — Funnel (port 8083) ────────────────────────────────────────
+  // ── S6 — native portal wrapper + iframe ──────────────────────────────────
   if (path === '/s6') {
-    res.writeHead(302, { Location: '/s6/funnel' });
-    res.end();
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(renderIframe('s6', '/s6/funnel'));
     return;
   }
   if (path.startsWith('/s6/')) {
@@ -809,10 +813,10 @@ async function handleRequest(req, res, options) {
     return;
   }
 
-  // ── S4 proxy — EMA Live Review (port 8080) ────────────────────────────────
+  // ── S4 — native portal wrapper + iframe ──────────────────────────────────
   if (path === '/s4') {
-    res.writeHead(302, { Location: '/s4/s4_live_review.html' });
-    res.end();
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(renderIframe('s4', '/s4/s4_live_review.html'));
     return;
   }
   if (path.startsWith('/s4/')) {
