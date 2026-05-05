@@ -1,5 +1,6 @@
 const path = require('path');
 const { manageTpSl, manageBreakEven } = require('../execution/bybitExecution');
+const { managePaperPositions } = require('../execution/paperExecution');
 const { loadBotRegistry } = require('../config/botRegistry');
 
 function startTradeManagementLoop(options = {}) {
@@ -7,7 +8,7 @@ function startTradeManagementLoop(options = {}) {
     intervalMs = Number(process.env.S2_MANAGEMENT_INTERVAL_MS || 15000),
     settingsPath = path.join(__dirname, '..', '..', 'config', 'settings.json'),
     envPath = '/home/ubuntu/.openclaw/.env',
-    dbPath = process.env.S2_DB_PATH || '/tmp/qs2_review/data/s2.sqlite',
+    dbPath = process.env.S2_DB_PATH || '/home/ubuntu/.openclaw/workspace/Q_S2/data/s2.sqlite',
     registryPath = path.join(__dirname, '..', '..', 'config', 'bots.json'),
     logger = console,
   } = options;
@@ -31,6 +32,12 @@ function startTradeManagementLoop(options = {}) {
         } catch (botError) {
           logger.warn('Trade management bot error', { botId, error: botError.message });
         }
+      }
+      // Paper position management (TP/SL/BE monitoring)
+      try {
+        await managePaperPositions({ dbPath, logger });
+      } catch (paperError) {
+        logger.warn('Paper management error', { error: paperError.message });
       }
     } catch (error) {
       logger.warn('Trade management loop error', { error: error.message });
