@@ -248,6 +248,44 @@ function initSchema(db) {
       block_reason TEXT,
       details_json TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS quality_metric_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL,
+      bot_id TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      signal TEXT NOT NULL,
+      metric_name TEXT NOT NULL,
+      metric_value REAL,
+      threshold REAL,
+      quality_met INTEGER NOT NULL DEFAULT 0,
+      components_json TEXT,
+      latency_ms INTEGER,
+      error TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS capital_pool_qpool_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL,
+      bot_id TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      signal_type TEXT NOT NULL,
+      v2_score REAL,
+      v1_score REAL,
+      score_tier TEXT,
+      total_pot REAL NOT NULL,
+      reserved_capital REAL NOT NULL,
+      deployed_capital REAL NOT NULL,
+      available_dynamic REAL NOT NULL,
+      base_allocation REAL,
+      dynamic_allocation REAL,
+      notional_allocated REAL,
+      stage1_notional REAL,
+      block_reason TEXT,
+      quality_metric_value REAL,
+      quality_met INTEGER NOT NULL DEFAULT 0,
+      details_json TEXT
+    );
   `);
 
   const ensureColumn = (tableName, columnName, columnSql) => {
@@ -621,6 +659,46 @@ function buildPersistence(db) {
 
     getOpenP2Positions() {
       return db.prepare("SELECT * FROM paper_positions WHERE status = 'open' AND paper_bot_id LIKE 'P2_Bot%' ORDER BY id ASC").all();
+    },
+
+    getOpenQPoolPositions() {
+      return db.prepare("SELECT * FROM paper_positions WHERE status = 'open' AND paper_bot_id LIKE 'QPool_Bot%' ORDER BY id ASC").all();
+    },
+
+    insertQualityMetricLog(row) {
+      return db.prepare(`
+        INSERT INTO quality_metric_log (
+          created_at, bot_id, symbol, signal, metric_name, metric_value,
+          threshold, quality_met, components_json, latency_ms, error
+        ) VALUES (
+          @created_at, @bot_id, @symbol, @signal, @metric_name, @metric_value,
+          @threshold, @quality_met, @components_json, @latency_ms, @error
+        )
+      `).run(row);
+    },
+
+    insertCapitalPoolQPoolEvent(row) {
+      return db.prepare(`
+        INSERT INTO capital_pool_qpool_events (
+          created_at, bot_id, symbol, signal_type, v2_score, v1_score, score_tier,
+          total_pot, reserved_capital, deployed_capital, available_dynamic,
+          base_allocation, dynamic_allocation, notional_allocated, stage1_notional,
+          block_reason, quality_metric_value, quality_met, details_json
+        ) VALUES (
+          @created_at, @bot_id, @symbol, @signal_type, @v2_score, @v1_score, @score_tier,
+          @total_pot, @reserved_capital, @deployed_capital, @available_dynamic,
+          @base_allocation, @dynamic_allocation, @notional_allocated, @stage1_notional,
+          @block_reason, @quality_metric_value, @quality_met, @details_json
+        )
+      `).run(row);
+    },
+
+    getQPoolCapitalEvents(limit = 50) {
+      return db.prepare('SELECT * FROM capital_pool_qpool_events ORDER BY id DESC LIMIT ?').all(limit);
+    },
+
+    getRecentQualityMetricLog(limit = 20) {
+      return db.prepare('SELECT * FROM quality_metric_log ORDER BY id DESC LIMIT ?').all(limit);
     },
   };
 }

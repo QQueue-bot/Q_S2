@@ -8,7 +8,7 @@ const { createRiskEngine } = require('../risk/evaluateSignal');
 const { executePaperTrade, executeSignalClose } = require('../execution/bybitExecution');
 const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite');
 const { computeS3Score } = require('../scoring/computeS3Score');
-const { executePaperEntry, executePaperSignalClose, executePaperV2Entry, executePaperV2SignalClose } = require('../execution/paperExecution');
+const { executePaperEntry, executePaperSignalClose, executePaperV2Entry, executePaperV2SignalClose, executePaperQPoolEntry, executePaperQPoolSignalClose } = require('../execution/paperExecution');
 
 function isHeartbeatSignal(input) {
   return typeof input === 'string' && input.trim().toUpperCase() === 'S2_HEARTBEAT';
@@ -183,6 +183,17 @@ function createWebhookServer(options = {}) {
                 logger.warn('[P2] Entry error', { error: p2Err.message });
               }
             });
+
+            // QPool — quality-gated, 2× notional entry
+            setImmediate(async () => {
+              try {
+                const qpResult = await executePaperQPoolEntry(parsedSignal, { dbPath, logger });
+                if (qpResult.ok) logger.info('[QPool] Entry queued', { paperBotId: qpResult.paperBotId, notional: qpResult.notionalUsd?.toFixed(2), metric: qpResult.qualityResult?.metricName, value: qpResult.qualityResult?.metricValue });
+                else if (qpResult.blocked) logger.info('[QPool] Entry blocked', { reason: qpResult.reason, metric: qpResult.qualityResult?.metricName, value: qpResult.qualityResult?.metricValue, threshold: qpResult.qualityResult?.threshold });
+              } catch (qpErr) {
+                logger.warn('[QPool] Entry error', { error: qpErr.message });
+              }
+            });
           }
 
           // S3 shadow scoring — fire-and-forget, runs concurrently with execution.
@@ -249,6 +260,16 @@ function createWebhookServer(options = {}) {
               if (p2Exit.ok) logger.info('[P2] Exit queued', p2Exit);
             } catch (p2Err) {
               logger.warn('[P2] Exit error', { error: p2Err.message });
+            }
+          });
+
+          // QPool exit — mirror same exit signal
+          setImmediate(async () => {
+            try {
+              const qpExit = await executePaperQPoolSignalClose(parsedSignal, { dbPath, logger });
+              if (qpExit.ok) logger.info('[QPool] Exit queued', qpExit);
+            } catch (qpErr) {
+              logger.warn('[QPool] Exit error', { error: qpErr.message });
             }
           });
         }

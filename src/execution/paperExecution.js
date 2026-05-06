@@ -7,6 +7,7 @@ const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite')
 
 const fs = require('fs');
 const { computeS3Score } = require('../scoring/computeS3Score');
+const { computeQualityMetric } = require('../quality/computeQualityMetric');
 const { computePoolState, computeAllocation } = require('../capitalPool/capitalPool');
 
 const BYBIT_BASE_URL = process.env.BYBIT_BASE_URL || 'https://api.bybit.com';
@@ -493,6 +494,242 @@ async function executePaperV2SignalClose(parsedSignal, options = {}) {
   return { ok: true, action: 'signal_exit', pnlPct, pnlUsd };
 }
 
+
+// ─── Q_Pool (quality-gated, 2× notional) ─────────────────────────────────────
+
+function getPaperQPoolBotForLiveBot(liveBotId) {
+  const registry = loadPaperRegistry();
+  return registry.bots.find(b => b.liveBotId === liveBotId && b.system === 'qpool') || null;
+}
+
+function getPaperQPoolBalance(persistence) {
+  const baseline = Number(process.env.QPOOL_BASELINE_USDT || 1000);
+  const closed = persistence.getClosedPaperPositions()
+    .filter(p => p.paper_bot_id && p.paper_bot_id.startsWith('QPool_'));
+  const realized = closed.reduce((sum, p) => sum + (Number(p.exit_pnl_usd) || 0), 0);
+  return baseline + realized;
+}
+
+function loadQualityConfig(botId) {
+  const path = require('path');
+  const fs   = require('fs');
+  const mdxPath = path.join(__dirname, '..', '..', 'mdx', `${botId}.source.json`);
+  try {
+    const src = JSON.parse(fs.readFileSync(mdxPath, 'utf8'));
+    return src.quality || null;
+  } catch { return null; }
+}
+
+async function executePaperQPoolEntry(parsedSignal, options = {}) {
+  const { dbPath, logger = console } = options;
+  const db = createDatabase(dbPath);
+  initSchema(db);
+  const persistence = buildPersistence(db);
+
+  const paperBot = getPaperQPoolBotForLiveBot(parsedSignal.botId);
+  if (!paperBot) return { ok: false, reason: 'no_qpool_bot_configured' };
+
+  const openPos = persistence.getOpenPaperPosition(paperBot.paperBotId);
+  if (openPos) {
+    logger.info('[QPool] Entry skipped — position already open', { paperBotId: paperBot.paperBotId });
+    return { ok: false, reason: 'position_already_open' };
+  }
+
+  const isEnterSignal = parsedSignal.signal === 'ENTER_LONG' || parsedSignal.signal === 'ENTER_SHORT';
+  if (!isEnterSignal) return { ok: false, reason: 'not_enter_signal' };
+
+  const now = new Date().toISOString();
+  const bybitBaseUrl = process.env.BYBIT_BASE_URL || 'https://api.bybit.com';
+
+  // Load quality config for this bot
+  const metricConfig = loadQualityConfig(parsedSignal.botId);
+
+  // Compute quality metric
+  const qualityResult = await computeQualityMetric({
+    symbol: paperBot.symbol,
+    metricConfig,
+    bybitBaseUrl,
+  });
+
+  // Log quality metric regardless of outcome
+  persistence.insertQualityMetricLog({
+    created_at: now,
+    bot_id: parsedSignal.botId,
+    symbol: paperBot.symbol,
+    signal: parsedSignal.signal,
+    metric_name: qualityResult.metricName,
+    metric_value: qualityResult.metricValue ?? null,
+    threshold: qualityResult.threshold ?? null,
+    quality_met: qualityResult.qualityMet ? 1 : 0,
+    components_json: qualityResult.components ? JSON.stringify(qualityResult.components) : null,
+    latency_ms: qualityResult.latencyMs ?? null,
+    error: qualityResult.error || null,
+  });
+
+  if (!qualityResult.qualityMet) {
+    logger.info('[QPool] Quality gate: SKIP', {
+      paperBotId: paperBot.paperBotId,
+      metric: qualityResult.metricName,
+      value: qualityResult.metricValue,
+      threshold: qualityResult.threshold,
+      error: qualityResult.error,
+    });
+    return { ok: false, blocked: true, reason: 'quality_gate', qualityResult };
+  }
+
+  // Compute S3 score for pool allocation tier
+  const settingsPath = path.join(__dirname, '..', '..', 'config', 'settings.json');
+  const settingsRaw = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+  const s3Config = settingsRaw.s3;
+
+  let s3Result;
+  try {
+    s3Result = await computeS3Score({
+      signal: parsedSignal.signal,
+      botId: parsedSignal.botId,
+      symbol: paperBot.symbol,
+      db: persistence,
+      s3Config,
+      bybitBaseUrl,
+    });
+  } catch (err) {
+    logger.warn('[QPool] S3 scoring failed — blocking entry', { error: err.message });
+    return { ok: false, blocked: true, reason: 's3_error', error: err.message };
+  }
+
+  const v1Score = s3Result.score;
+  const v2Score = s3Result.scoreV2 != null ? s3Result.scoreV2 : v1Score;
+
+  // Capital pool allocation (same as P2 but with quality multiplier applied)
+  const totalPot = getPaperQPoolBalance(persistence);
+  const openQPoolPositions = persistence.getOpenQPoolPositions();
+  const poolState = computePoolState(totalPot, openQPoolPositions);
+  const baseAllocation = computeAllocation(v2Score, poolState);
+
+  const qpoolEventBase = {
+    created_at: now,
+    bot_id: parsedSignal.botId,
+    symbol: paperBot.symbol,
+    v1_score: v1Score,
+    v2_score: v2Score,
+    score_tier: baseAllocation.tier.name,
+    total_pot: totalPot,
+    reserved_capital: poolState.reservedCapital,
+    deployed_capital: poolState.deployedCapital,
+    available_dynamic: poolState.availableDynamic,
+    base_allocation: baseAllocation.baseAllocation,
+    dynamic_allocation: baseAllocation.dynamicAllocation,
+    notional_allocated: baseAllocation.notionalAllocated,
+    stage1_notional: baseAllocation.stage1Notional,
+    block_reason: baseAllocation.blockReason || null,
+    quality_metric_value: qualityResult.metricValue ?? null,
+    quality_met: 1,
+    details_json: null,
+  };
+
+  if (baseAllocation.blocked) {
+    persistence.insertCapitalPoolQPoolEvent({ ...qpoolEventBase, signal_type: 'BLOCKED' });
+    logger.info('[QPool] BLOCKED by capital pool', {
+      paperBotId: paperBot.paperBotId, v2Score, tier: baseAllocation.tier.name,
+      blockReason: baseAllocation.blockReason,
+    });
+    return { ok: false, blocked: true, reason: 'capital_pool_block', v2Score,
+             tier: baseAllocation.tier.name, blockReason: baseAllocation.blockReason };
+  }
+
+  // Apply quality notional multiplier (default 2×)
+  const multiplier = metricConfig?.notionalMultiplier || 2.0;
+  const stage1Notional = Math.min(
+    baseAllocation.stage1Notional * multiplier,
+    poolState.totalPot * 0.30  // hard cap: 30% of pool
+  );
+
+  const symbol = paperBot.symbol;
+  const side = parsedSignal.signal === 'ENTER_LONG' ? 'Buy' : 'Sell';
+  const entryPrice = await getMarkPrice(symbol);
+  const qty = stage1Notional / entryPrice;
+
+  persistence.insertPaperPosition({
+    created_at: now,
+    paper_bot_id: paperBot.paperBotId,
+    live_bot_id: parsedSignal.botId,
+    symbol,
+    side,
+    signal: parsedSignal.signal,
+    entry_price: entryPrice,
+    qty,
+    notional_usd: stage1Notional,
+  });
+
+  persistence.insertCapitalPoolQPoolEvent({
+    ...qpoolEventBase,
+    notional_allocated: baseAllocation.notionalAllocated * multiplier,
+    stage1_notional: stage1Notional,
+    signal_type: parsedSignal.signal,
+  });
+
+  logger.info('[QPool] Quality gate: ENTER', {
+    paperBotId: paperBot.paperBotId, symbol, side, entryPrice,
+    metric: qualityResult.metricName, value: qualityResult.metricValue,
+    threshold: qualityResult.threshold,
+    v2Score, tier: baseAllocation.tier.name,
+    stage1Notional: stage1Notional.toFixed(2), multiplier,
+    latencyMs: qualityResult.latencyMs,
+  });
+  return { ok: true, paperBotId: paperBot.paperBotId, symbol, side, entryPrice,
+           v1Score, v2Score, tier: baseAllocation.tier.name,
+           notionalUsd: stage1Notional, qualityResult };
+}
+
+async function executePaperQPoolSignalClose(parsedSignal, options = {}) {
+  const { dbPath, logger = console } = options;
+  const db = createDatabase(dbPath);
+  initSchema(db);
+  const persistence = buildPersistence(db);
+
+  const paperBot = getPaperQPoolBotForLiveBot(parsedSignal.botId);
+  if (!paperBot) return { ok: false, reason: 'no_qpool_bot_configured' };
+
+  const openPos = persistence.getOpenPaperPosition(paperBot.paperBotId);
+  if (!openPos) return { ok: true, action: 'no_position' };
+
+  const expectedSide = parsedSignal.signal === 'EXIT_LONG' ? 'Buy' : 'Sell';
+  if (openPos.side !== expectedSide) return { ok: true, action: 'direction_mismatch' };
+
+  const exitPrice = await getMarkPrice(openPos.symbol);
+  const pnlPct = computePnlPercent(openPos.side, openPos.entry_price, exitPrice);
+  const remainingQty = openPos.qty * (openPos.remaining_qty_pct / 100);
+  const pnlUsd = remainingQty * openPos.entry_price * (pnlPct / 100);
+
+  persistence.closePaperPosition({
+    id: openPos.id,
+    exit_price: exitPrice,
+    exit_reason: 'signal_exit',
+    exit_pnl_pct: pnlPct,
+    exit_pnl_usd: pnlUsd,
+    closed_at: new Date().toISOString(),
+  });
+
+  persistence.insertPaperTpEvent({
+    created_at: new Date().toISOString(),
+    paper_position_id: openPos.id,
+    paper_bot_id: paperBot.paperBotId,
+    symbol: openPos.symbol,
+    event_type: 'signal_exit',
+    action_key: 'signal_exit',
+    trigger_percent: 0,
+    close_percent: 100,
+    mark_price: exitPrice,
+    qty_closed: remainingQty,
+    pnl_pct: pnlPct,
+    pnl_usd: pnlUsd,
+  });
+
+  logger.info('[QPool] Signal exit', { paperBotId: paperBot.paperBotId,
+    symbol: openPos.symbol, exitPrice, pnlPct: pnlPct && pnlPct.toFixed(2) });
+  return { ok: true, action: 'signal_exit', pnlPct, pnlUsd };
+}
+
 module.exports = {
   executePaperEntry,
   executePaperSignalClose,
@@ -502,4 +739,7 @@ module.exports = {
   executePaperV2Entry,
   executePaperV2SignalClose,
   getPaperV2Balance,
+  executePaperQPoolEntry,
+  executePaperQPoolSignalClose,
+  getPaperQPoolBalance,
 };

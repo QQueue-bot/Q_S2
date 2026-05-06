@@ -364,7 +364,8 @@ function loadPaperPortfolio(dbPath) {
     const db = new Database(dbPath, { readonly: true });
 
     const P1_BASE = Number(process.env.PAPER_BASELINE_USDT  || 2756.68);
-    const P2_BASE = Number(process.env.PAPER2_BASELINE_USDT || 2756.68);
+    const P2_BASE    = Number(process.env.PAPER2_BASELINE_USDT || 2756.68);
+    const QPOOL_BASE = Number(process.env.QPOOL_BASELINE_USDT || 1000);
 
     const p1sum = db.prepare(
       "SELECT COALESCE(SUM(exit_pnl_usd),0) AS total FROM paper_positions WHERE paper_bot_id LIKE 'P_Bot%' AND status='closed'"
@@ -372,11 +373,15 @@ function loadPaperPortfolio(dbPath) {
     const p2sum = db.prepare(
       "SELECT COALESCE(SUM(exit_pnl_usd),0) AS total FROM paper_positions WHERE paper_bot_id LIKE 'P2_Bot%' AND status='closed'"
     ).get();
+    const qpsum = db.prepare(
+      "SELECT COALESCE(SUM(exit_pnl_usd),0) AS total FROM paper_positions WHERE paper_bot_id LIKE 'QPool_Bot%' AND status='closed' AND created_at >= '2026-05-07T00:00:00.000Z'"
+    ).get();
 
     db.close();
     return {
-      p1: { start: P1_BASE, current: P1_BASE + (p1sum.total || 0), pnl: p1sum.total || 0 },
-      p2: { start: P2_BASE, current: P2_BASE + (p2sum.total || 0), pnl: p2sum.total || 0 },
+      p1:    { start: P1_BASE,    current: P1_BASE    + (p1sum.total || 0), pnl: p1sum.total || 0 },
+      p2:    { start: P2_BASE,    current: P2_BASE    + (p2sum.total || 0), pnl: p2sum.total || 0 },
+      qpool: { start: QPOOL_BASE, current: QPOOL_BASE + (qpsum.total || 0), pnl: qpsum.total || 0 },
     };
   } catch(e) {
     return { p1: null, p2: null, error: e.message };
@@ -392,6 +397,7 @@ function loadEquityData(dbPath) {
     const LIVE_BASE  = Number(process.env.PORTFOLIO_BASELINE_USDT || 2799.94) / 8;
     const PAPER_BASE = Number(process.env.PAPER_BASELINE_USDT  || 2756.68) / 8;
     const P2_BASE    = Number(process.env.PAPER2_BASELINE_USDT || 2756.68) / 8;
+    const QPOOL_BASE = Number(process.env.QPOOL_BASELINE_USDT || 1000);
 
     const entries = db.prepare(`
       SELECT id, bot_id, symbol, signal, notional_usd, qty, created_at
@@ -586,14 +592,31 @@ function loadCapitalPoolData(dbPath) {
     const openP2 = db.prepare(
       "SELECT paper_bot_id, symbol, notional_usd, side FROM paper_positions WHERE paper_bot_id LIKE 'P2_Bot%' AND status='open'"
     ).all();
+
+    // QPool equity curve (single combined line, % vs $1000 baseline, from 7 May 2026)
+    const QPOOL_ACT = '2026-05-07T00:00:00.000Z';
+    const qpoolClosed = db.prepare(
+      "SELECT paper_bot_id, closed_at, exit_pnl_usd FROM paper_positions WHERE paper_bot_id LIKE 'QPool_Bot%' AND status='closed' AND created_at >= ? ORDER BY closed_at ASC"
+    ).all(QPOOL_ACT);
+    let qpoolCum = 0;
+    const qpoolEquity = [{ d: QPOOL_ACT.slice(0, 10), p: 0 }];
+    for (const pos of qpoolClosed) {
+      qpoolCum += (pos.exit_pnl_usd || 0);
+      const day = (pos.closed_at || '').slice(0, 10);
+      qpoolEquity.push({ d: day, p: Math.round(qpoolCum / QPOOL_BASE * 10000) / 100 });
+    }
+
+    const openQPool = db.prepare(
+      "SELECT paper_bot_id, symbol, notional_usd, side FROM paper_positions WHERE paper_bot_id LIKE 'QPool_Bot%' AND status='open'"
+    ).all();
     db.close();
-    return { botEvents, newest, openP2 };
+    return { botEvents, newest, openP2, qpoolEquity, openQPool };
   } catch(e) { return { error: e.message }; }
 }
 
 function renderCapitalPoolPanel(cpData) {
   if (!cpData || cpData.error || !cpData.newest) return '';
-  const { botEvents, newest, openP2 } = cpData;
+  const { botEvents, newest, openP2, qpoolEquity, openQPool } = cpData;
 
   const totalPot = newest.total_pot || 0;
   const reserved = newest.reserved_capital || 0;
@@ -921,6 +944,14 @@ function renderS2Page(status, paperPortfolio, cpData) {
             <div style="background:#0f172a;border-radius:8px;padding:8px 10px;"><div style="font-size:11px;color:#64748b;">P&L</div><div style="font-size:14px;font-weight:700;margin-top:2px;color:${pp.p2.pnl>=0?'#86efac':'#fca5a5'};">${pp.p2.pnl>=0?'+':''}${pp.p2.pnl.toFixed(0)} USDT</div></div>
           </div>
         </div>` : ''}
+        ${pp.qpool ? `<div style="background:#111827;border:1px solid #1f2937;border-radius:12px;padding:12px;">
+          <div style="font-size:11px;font-weight:700;color:#8b5cf6;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Q_Pool · Quality-Gated · 2× (from 7 May 2026)</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
+            <div style="background:#0f172a;border-radius:8px;padding:8px 10px;"><div style="font-size:11px;color:#64748b;">Starting</div><div style="font-size:14px;font-weight:700;margin-top:2px;">${pp.qpool.start.toFixed(0)} USDT</div></div>
+            <div style="background:#0f172a;border-radius:8px;padding:8px 10px;"><div style="font-size:11px;color:#64748b;">Current</div><div style="font-size:14px;font-weight:700;margin-top:2px;">${pp.qpool.current.toFixed(0)} USDT</div></div>
+            <div style="background:#0f172a;border-radius:8px;padding:8px 10px;"><div style="font-size:11px;color:#64748b;">P&L</div><div style="font-size:14px;font-weight:700;margin-top:2px;color:${pp.qpool.pnl>=0?'#86efac':'#fca5a5'};">${pp.qpool.pnl>=0?'+':''}${pp.qpool.pnl.toFixed(2)} USDT</div></div>
+          </div>
+        </div>` : ''}
       </div>
     </div>
     ${healthPanel}
@@ -960,6 +991,7 @@ function renderS2Page(status, paperPortfolio, cpData) {
         <div style="background:#111827;border:1px solid #1f2937;border-radius:12px;padding:14px;"><div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;">S2 Live System</div><canvas id="chart-live" style="width:100%;height:540px;display:block;"></canvas></div>
         <div style="background:#111827;border:1px solid #1f2937;border-radius:12px;padding:14px;"><div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;">P1 Mirror (control)</div><canvas id="chart-p1" style="width:100%;height:540px;display:block;"></canvas></div>
         <div style="background:#111827;border:1px solid #1f2937;border-radius:12px;padding:14px;"><div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;">P2 Capital Pool</div><canvas id="chart-p2" style="width:100%;height:540px;display:block;"></canvas></div>
+        <div style="background:#111827;border:1px solid #1f2937;border-radius:12px;padding:14px;"><div style="font-size:11px;font-weight:700;color:#8b5cf6;margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;">Q_Pool (from 7 May 2026)</div><canvas id="chart-qpool" style="width:100%;height:300px;display:block;"></canvas></div>
       </div>
     </div>
 
@@ -969,13 +1001,15 @@ function renderS2Page(status, paperPortfolio, cpData) {
         <div style="background:#111827;border:1px solid #1f2937;border-radius:12px;padding:14px;"><div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;">S2 Live — since 3 May</div><canvas id="chart-live-today" style="width:100%;height:540px;display:block;"></canvas></div>
         <div style="background:#111827;border:1px solid #1f2937;border-radius:12px;padding:14px;"><div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;">P1 Mirror — since 3 May</div><canvas id="chart-p1-today" style="width:100%;height:540px;display:block;"></canvas></div>
         <div style="background:#111827;border:1px solid #1f2937;border-radius:12px;padding:14px;"><div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;">P2 Capital Pool — since 3 May</div><canvas id="chart-p2-today" style="width:100%;height:540px;display:block;"></canvas></div>
+        <div style="background:#111827;border:1px solid #1f2937;border-radius:12px;padding:14px;"><div style="font-size:11px;font-weight:700;color:#8b5cf6;margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;">Q_Pool — since 7 May 2026</div><canvas id="chart-qpool-today" style="width:100%;height:300px;display:block;"></canvas></div>
       </div>
     </div>
 
     <script>
     (function(){
       var COLORS=['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#ec4899'];
-      var BOT_LABELS={Bot1:'Bot1',Bot2:'Bot2',Bot3:'Bot3',Bot4:'Bot4',Bot5:'Bot5',Bot6:'Bot6',Bot7:'Bot7',Bot8:'Bot8',P_Bot1:'Bot1',P_Bot2:'Bot2',P_Bot3:'Bot3',P_Bot4:'Bot4',P_Bot5:'Bot5',P_Bot6:'Bot6',P_Bot7:'Bot7',P_Bot8:'Bot8',P2_Bot1:'Bot1',P2_Bot2:'Bot2',P2_Bot3:'Bot3',P2_Bot4:'Bot4',P2_Bot5:'Bot5',P2_Bot6:'Bot6',P2_Bot7:'Bot7',P2_Bot8:'Bot8'};
+      var QPOOL_EQUITY=${JSON.stringify(cpData.qpoolEquity||[])};
+      var BOT_LABELS={Bot1:'Bot1',Bot2:'Bot2',Bot3:'Bot3',Bot4:'Bot4',Bot5:'Bot5',Bot6:'Bot6',Bot7:'Bot7',Bot8:'Bot8',P_Bot1:'Bot1',P_Bot2:'Bot2',P_Bot3:'Bot3',P_Bot4:'Bot4',P_Bot5:'Bot5',P_Bot6:'Bot6',P_Bot7:'Bot7',P_Bot8:'Bot8',P2_Bot1:'Bot1',P2_Bot2:'Bot2',P2_Bot3:'Bot3',P2_Bot4:'Bot4',P2_Bot5:'Bot5',P2_Bot6:'Bot6',P2_Bot7:'Bot7',P2_Bot8:'Bot8',QPool_Bot1:'Bot1',QPool_Bot2:'Bot2',QPool_Bot3:'Bot3',QPool_Bot4:'Bot4',QPool_Bot5:'Bot5',QPool_Bot6:'Bot6',QPool_Bot7:'Bot7',QPool_Bot8:'Bot8'};
       function drawChart(id,data,opts){
         var canvas=document.getElementById(id); if(!canvas)return;
         var dpr=window.devicePixelRatio||1;
@@ -1065,6 +1099,12 @@ function renderS2Page(status, paperPortfolio, cpData) {
       }
       loadCharts();
       setInterval(loadCharts,60000);
+      // Q_Pool equity chart
+      if(QPOOL_EQUITY && QPOOL_EQUITY.length > 1){
+        var qpDs=[{label:'Q_Pool',data:QPOOL_EQUITY.map(function(p){return{x:p.d,y:p.p};}),borderColor:'#8b5cf6',backgroundColor:'rgba(139,92,246,0.08)',fill:true,tension:0.3,pointRadius:2}];
+        drawChart('chart-qpool',{datasets:qpDs},{yLabel:'% return',title:'Q_Pool Equity (from 7 May 2026)'});
+        drawChart('chart-qpool-today',{datasets:qpDs},{yLabel:'% return',title:'Q_Pool Equity'});
+      }
     })();
     </script>
 

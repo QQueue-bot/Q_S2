@@ -25,8 +25,22 @@
   "profiles": {
     "safe": {
       "strategy": {
-        "tpTargetsPercent": [2.99, 5.08, 5.88, 8.79, 14.96, 22.38],
-        "tpAllocationsPercent": [26, 25, 15, 14, 11, 9],
+        "tpTargetsPercent": [
+          2.99,
+          5.08,
+          5.88,
+          8.79,
+          14.96,
+          22.38
+        ],
+        "tpAllocationsPercent": [
+          26,
+          25,
+          15,
+          14,
+          11,
+          9
+        ],
         "stopLossPercent": 6,
         "slToBeTrigger": "TP1",
         "leverage": 1
@@ -41,8 +55,22 @@
     },
     "balanced": {
       "strategy": {
-        "tpTargetsPercent": [1.5, 2.83, 4.32, 6.72, 9.41, 18.23],
-        "tpAllocationsPercent": [16, 18, 23, 20, 15, 8],
+        "tpTargetsPercent": [
+          1.5,
+          2.83,
+          4.32,
+          6.72,
+          9.41,
+          18.23
+        ],
+        "tpAllocationsPercent": [
+          16,
+          18,
+          23,
+          20,
+          15,
+          8
+        ],
         "stopLossPercent": 5,
         "slToBeTrigger": "TP1",
         "leverage": 3
@@ -57,8 +85,22 @@
     },
     "aggressive": {
       "strategy": {
-        "tpTargetsPercent": [4.87, 5.44, 7.18, 10.96, 16.23, 24.03],
-        "tpAllocationsPercent": [8, 28, 11, 23, 20, 10],
+        "tpTargetsPercent": [
+          4.87,
+          5.44,
+          7.18,
+          10.96,
+          16.23,
+          24.03
+        ],
+        "tpAllocationsPercent": [
+          8,
+          28,
+          11,
+          23,
+          20,
+          10
+        ],
         "stopLossPercent": 6,
         "slToBeTrigger": "TP1",
         "leverage": 6
@@ -71,5 +113,11 @@
         "avgTradeProfit": 99.32
       }
     }
+  },
+  "quality": {
+    "metric": "composite",
+    "threshold": 60,
+    "candleInterval": 60,
+    "notionalMultiplier": 2.0
   }
 }
