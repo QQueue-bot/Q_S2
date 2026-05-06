@@ -272,21 +272,16 @@ function recordTradeAction(persistence, payload) {
 }
 
 function hasBreakEvenArmed(persistence, symbol, livePosition = null) {
+  // Use trade_state_events scoped by tradeId (symbol:side:createdTime) to avoid
+  // cross-trade bleed. Bybit may return a stale createdTime, but the side component
+  // ensures a Long's BE_ARM never matches a Short's query and vice versa.
+  if (livePosition && persistence.findTradeStateEventByKey) {
+    const tradeId = getTradeId(livePosition, symbol);
+    return hasTradeActionExecuted(persistence, tradeId, 'BE_ARM');
+  }
+  // Fallback for callers without livePosition (e.g. DCA guards pre-entry)
   const events = persistence.getBreakEvenEvents ? persistence.getBreakEvenEvents() : [];
-  const entryTimestampMs = livePosition?.createdTime ? Number(livePosition.createdTime) : null;
-  return events.some(event => {
-    if (event.symbol !== symbol || event.event_type !== 'armed') {
-      return false;
-    }
-    if (!entryTimestampMs) {
-      return true;
-    }
-    const eventTimestampMs = Date.parse(event.created_at);
-    if (Number.isNaN(eventTimestampMs)) {
-      return false;
-    }
-    return eventTimestampMs >= entryTimestampMs;
-  });
+  return events.some(event => event.symbol === symbol && event.event_type === 'armed');
 }
 
 function shouldTriggerBreakEven(settings, livePosition, persistence) {
