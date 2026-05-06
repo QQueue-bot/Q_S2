@@ -48,14 +48,17 @@ function resolveMdxMeta(botId, registryPath) {
     return {
       mdxProfile: ctx.mdx.enabled ? ctx.mdx.profile : null,
       leverage: ctx.settings.positionSizing.leverage || null,
+      tpLevels: ctx.settings.takeProfit?.levels || [],
+      beTrigger: ctx.settings.breakEven?.triggerPercent ?? null,
+      slTrigger: ctx.settings.stopLoss?.triggerPercent ?? null,
     };
   } catch {
-    return { mdxProfile: null, leverage: null };
+    return { mdxProfile: null, leverage: null, tpLevels: [], beTrigger: null, slTrigger: null };
   }
 }
 
 async function fetchBotStatus(bot, registryPath, envPath) {
-  const { mdxProfile, leverage } = resolveMdxMeta(bot.botId, registryPath);
+  const { mdxProfile, leverage, tpLevels, beTrigger, slTrigger } = resolveMdxMeta(bot.botId, registryPath);
   try {
     const resolved = resolveBotCredentials(bot.botId, { registryPath, envPath });
     const credentials = { apiKey: resolved.apiKey, apiSecret: resolved.apiSecret };
@@ -125,6 +128,9 @@ async function fetchBotStatus(bot, registryPath, envPath) {
       positionLeverage,
       positionSizePct,
       remainingQtyPct,
+      tpLevels,
+      beTrigger,
+      slTrigger,
     };
   } catch (error) {
     return {
@@ -133,6 +139,9 @@ async function fetchBotStatus(bot, registryPath, envPath) {
       enabled: bot.enabled,
       mdxProfile,
       leverage,
+      tpLevels,
+      beTrigger,
+      slTrigger,
       tradeState: 'Unknown',
       balance: null,
       balanceStatus: 'error',
@@ -145,6 +154,9 @@ async function fetchBotStatus(bot, registryPath, envPath) {
       positionLeverage: null,
       positionSizePct: null,
       remainingQtyPct: null,
+      tpLevels,
+      beTrigger,
+      slTrigger,
       error: error.message,
     };
   }
@@ -453,6 +465,35 @@ function buildMdxRenewalMeta() {
   return { renewalDate: renewalDateStr, daysRemaining, color };
 }
 
+
+function loadTpBeState(db, botId, symbol, tpLevels, beTrigger) {
+  try {
+    const entryRow = db.prepare(
+      'SELECT MAX(created_at) AS entry_at FROM order_attempts ' +
+      "WHERE bot_id=? AND symbol=? AND signal LIKE 'ENTER%' AND status='submitted' AND created_at >= ?"
+    ).get(botId, symbol, SYSTEM_RESET_AT);
+    const entryCutoff = entryRow?.entry_at || SYSTEM_RESET_AT;
+
+    const events = db.prepare(
+      "SELECT action_key, action_type, state FROM trade_state_events " +
+      "WHERE bot_id=? AND symbol=? AND state IN ('tp_done','be_armed','be_fired') AND created_at >= ?"
+    ).all(botId, symbol, entryCutoff);
+
+    const firedKeys = new Set(events.map(e => e.action_key));
+    const levels = (tpLevels || []).filter(l => l.enabled !== false).map(l => ({
+      index: l.index,
+      triggerPercent: l.triggerPercent,
+      closePercent: l.closePercent,
+      fired: firedKeys.has(`take_profit:TP_${l.triggerPercent}_${l.closePercent}`),
+    }));
+
+    const beArmed = events.some(e => e.action_key === 'BE_ARM' && e.state === 'be_armed');
+    const beFired = events.some(e => e.action_type === 'break_even' && e.state === 'be_fired');
+
+    return { levels, beArmed, beFired, beTrigger };
+  } catch { return null; }
+}
+
 async function buildMobileBotStatus(options = {}) {
   const registryPath = options.registryPath || path.join(__dirname, '..', '..', 'config', 'bots.json');
   const envPath = options.envPath || '/home/ubuntu/.openclaw/.env';
@@ -530,11 +571,16 @@ async function buildMobileBotStatus(options = {}) {
           unrealizedPnl: paperUPnl,
         };
       });
+      const inTrade = bot.tradeState === 'Long' || bot.tradeState === 'Short';
+      const tpBeState = inTrade
+        ? loadTpBeState(db, bot.botId, bot.symbol, bot.tpLevels, bot.beTrigger)
+        : null;
       return {
         ...bot,
         tradeStats: tradeStatsByBot[bot.botId] || null,
         signalAnalysis: loadBotSignalAnalysis(db, bot.botId, bot.symbol),
         paperPositions: paperPositions.length > 0 ? paperPositions : null,
+        tpBeState,
       };
     });
     db.close();

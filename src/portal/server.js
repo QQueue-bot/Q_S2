@@ -715,6 +715,21 @@ function renderBotCard(bot) {
       ${Number.isFinite(bot.unrealizedPnl) ? `<div class="pos-row"><span class="pos-key">uPnL</span><span style="color:${upnlColor};font-weight:700;">${fmtPnl(bot.unrealizedPnl)}</span></div>` : ''}
       ${(bot.remainingQtyPct !== null && bot.remainingQtyPct !== undefined) ? `<div class="pos-row"><span class="pos-key">Rem. qty</span><span>${bot.remainingQtyPct.toFixed(0)}%</span></div>` : ''}
       ${analysisBadgeHtml}
+      ${(() => {
+        const tbs = bot.tpBeState;
+        if (!tbs || !tbs.levels || !tbs.levels.length) return '';
+        const rows = tbs.levels.map(l => {
+          const cls = l.fired ? 'tp-fired' : 'tp-pending';
+          const dot = l.fired ? '✓' : '○';
+          return `<div class="tp-row ${cls}"><span class="tp-lbl">TP${l.index}</span><span class="tp-trigger">${l.triggerPercent}%</span><span class="tp-alloc">\xd7${l.closePercent}%</span><span class="tp-dot">${dot}</span></div>`;
+        }).join('');
+        const beTrigger = tbs.beTrigger !== null ? `${tbs.beTrigger}%` : '–';
+        const beCls = tbs.beFired ? 'tp-be-fired' : tbs.beArmed ? 'tp-be-armed' : 'tp-pending';
+        const beDot = tbs.beFired ? '✗' : tbs.beArmed ? '●' : '○';
+        const slTrigger = bot.slTrigger !== null && bot.slTrigger !== undefined ? `${bot.slTrigger}%` : null;
+        const slRow = slTrigger ? `<div class="tp-row tp-sl"><span class="tp-lbl">SL</span><span class="tp-trigger">${slTrigger}</span><span class="tp-alloc"></span><span class="tp-dot">▼</span></div>` : '';
+        return `<div class="tp-ladder">${rows}<div class="tp-row ${beCls}"><span class="tp-lbl">BE</span><span class="tp-trigger">${beTrigger}</span><span class="tp-alloc"></span><span class="tp-dot">${beDot}</span></div>${slRow}</div>`;
+      })()}
     </div>`;
   }
 
@@ -843,6 +858,17 @@ function renderS2Page(status, paperPortfolio, cpData) {
     .bot-stats{border-top:1px solid #1e293b;margin-top:8px;padding-top:8px;display:grid;gap:4px;}
     .stats-row{display:flex;justify-content:space-between;gap:8px;font-size:12px;}
     .stats-key{color:#64748b;flex-shrink:0;}
+    /* TP ladder */
+    .tp-ladder{margin-top:8px;padding-top:6px;border-top:1px solid #1e293b;display:grid;gap:2px;}
+    .tp-row{display:grid;grid-template-columns:26px 1fr 1fr 16px;align-items:center;font-size:11px;gap:4px;padding:1px 0;}
+    .tp-lbl{color:#64748b;font-weight:600;}
+    .tp-trigger{color:#64748b;}
+    .tp-alloc{color:#334155;text-align:right;}
+    .tp-dot{text-align:right;font-size:11px;color:#334155;}
+    .tp-fired .tp-lbl{color:#4ade80;}.tp-fired .tp-trigger{color:#4ade80;}.tp-fired .tp-alloc{color:#166534;}.tp-fired .tp-dot{color:#4ade80;}
+    .tp-be-armed .tp-lbl{color:#f59e0b;}.tp-be-armed .tp-trigger{color:#f59e0b;}.tp-be-armed .tp-dot{color:#f59e0b;}
+    .tp-be-fired .tp-lbl{color:#64748b;text-decoration:line-through;}.tp-be-fired .tp-trigger{color:#64748b;text-decoration:line-through;}
+    .tp-sl .tp-lbl{color:#f87171;}.tp-sl .tp-trigger{color:#f87171;}.tp-sl .tp-dot{color:#f87171;}
     /* Misc */
     .generated{font-size:12px;opacity:.6;text-align:center;margin-top:12px;}
     .freshness{font-size:12px;text-align:center;margin-top:6px;color:#93c5fd;}
