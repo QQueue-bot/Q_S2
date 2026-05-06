@@ -284,6 +284,14 @@ function fmtAge(minutes) {
   return m > 0 ? `${h}h ${m}m ago` : `${h}h ago`;
 }
 
+function fmtPrice(val) {
+  if (!Number.isFinite(val)) return '–';
+  if (val >= 1000) return val.toFixed(2);
+  if (val >= 10) return val.toFixed(4);
+  if (val >= 0.01) return val.toFixed(5);
+  return val.toFixed(6);
+}
+
 function fmtPnl(val, suffix = ' USDT') {
   if (!Number.isFinite(val)) return '–';
   const sign = val >= 0 ? '+' : '';
@@ -347,6 +355,322 @@ function renderServiceHealthPanel(serviceHealth) {
   </div>`;
 }
 
+
+// ─── Paper & equity data helpers ─────────────────────────────────────────────
+
+function loadPaperPortfolio(dbPath) {
+  try {
+    const Database = require('better-sqlite3');
+    const db = new Database(dbPath, { readonly: true });
+
+    const P1_BASE = Number(process.env.PAPER_BASELINE_USDT  || 2756.68);
+    const P2_BASE = Number(process.env.PAPER2_BASELINE_USDT || 2756.68);
+
+    const p1sum = db.prepare(
+      "SELECT COALESCE(SUM(exit_pnl_usd),0) AS total FROM paper_positions WHERE paper_bot_id LIKE 'P_Bot%' AND status='closed'"
+    ).get();
+    const p2sum = db.prepare(
+      "SELECT COALESCE(SUM(exit_pnl_usd),0) AS total FROM paper_positions WHERE paper_bot_id LIKE 'P2_Bot%' AND status='closed'"
+    ).get();
+
+    db.close();
+    return {
+      p1: { start: P1_BASE, current: P1_BASE + (p1sum.total || 0), pnl: p1sum.total || 0 },
+      p2: { start: P2_BASE, current: P2_BASE + (p2sum.total || 0), pnl: p2sum.total || 0 },
+    };
+  } catch(e) {
+    return { p1: null, p2: null, error: e.message };
+  }
+}
+
+function loadEquityData(dbPath) {
+  try {
+    const Database = require('better-sqlite3');
+    const db = new Database(dbPath, { readonly: true });
+
+    const SYSTEM_START_MS = new Date('2026-04-24T19:09:00.000Z').getTime();
+    const LIVE_BASE  = Number(process.env.PORTFOLIO_BASELINE_USDT || 2799.94) / 8;
+    const PAPER_BASE = Number(process.env.PAPER_BASELINE_USDT  || 2756.68) / 8;
+    const P2_BASE    = Number(process.env.PAPER2_BASELINE_USDT || 2756.68) / 8;
+
+    const entries = db.prepare(`
+      SELECT id, bot_id, symbol, signal, notional_usd, qty, created_at
+      FROM order_attempts
+      WHERE signal LIKE 'ENTER%' AND signal NOT LIKE '%DCA_ADD%'
+        AND signal NOT LIKE '%CLOSE_FIRST%'
+        AND created_at >= '2026-04-24T19:09:00.000Z'
+      ORDER BY id ASC`).all();
+
+    const dcaRows = db.prepare(`
+      SELECT bot_id, symbol, notional_usd, created_at FROM order_attempts
+      WHERE signal LIKE '%DCA_ADD%' AND created_at >= '2026-04-24T19:09:00.000Z'
+      ORDER BY id ASC`).all();
+
+    const exitRows = db.prepare(`
+      SELECT bot_id, symbol, exit_reason, trigger_percent, close_percent, mark_price, created_at
+      FROM exit_events WHERE created_at >= '2026-04-24T19:09:00.000Z'
+      ORDER BY id ASC`).all();
+
+    const LIVE_BOTS = ['Bot1','Bot2','Bot3','Bot4','Bot5','Bot6','Bot7','Bot8'];
+    const liveEquity = {}, liveCum = {};
+    LIVE_BOTS.forEach(b => { liveEquity[b] = [{ d: 0, p: 0 }]; liveCum[b] = 0; });
+
+    for (let i = 0; i < entries.length; i++) {
+      const en = entries[i];
+      const botId = en.bot_id; const sym = en.symbol;
+      const isLong = en.signal.includes('LONG');
+      const qty = parseFloat(en.qty) || 0;
+      const ep = qty > 0 ? en.notional_usd / qty : 0;
+      const next = entries.slice(i + 1).find(e => e.bot_id === botId && e.symbol === sym);
+      const cutoff = next ? next.created_at : null;
+      const dca = dcaRows.filter(e => e.bot_id === botId && e.symbol === sym &&
+        e.created_at > en.created_at && (!cutoff || e.created_at <= cutoff));
+      const exs = exitRows.filter(e => e.bot_id === botId && e.symbol === sym &&
+        e.created_at > en.created_at && (!cutoff || e.created_at <= cutoff));
+      let notional = en.notional_usd;
+      dca.forEach(d => { notional += d.notional_usd; });
+      let pnl = 0, rem = 1.0, closed = false, exitAt = null;
+      for (const ex of exs) {
+        const cf = ex.close_percent / 100; const sf = cf * rem; const sn = notional * sf;
+        let slice;
+        if (ex.exit_reason === 'take_profit') slice = (ex.trigger_percent / 100) * sn;
+        else if (ex.exit_reason === 'stop_loss') slice = -(ex.trigger_percent / 100) * sn;
+        else { const mv = isLong ? (ex.mark_price - ep) / ep : (ep - ex.mark_price) / ep; slice = mv * sn; }
+        pnl += slice; rem -= sf; exitAt = ex.created_at;
+        if (ex.close_percent >= 100 || rem <= 0.001) { closed = true; break; }
+      }
+      if (!closed || !liveEquity[botId] || !exitAt) continue;
+      liveCum[botId] += pnl;
+      const day = Math.round((new Date(exitAt).getTime() - SYSTEM_START_MS) / 864e5 * 100) / 100;
+      liveEquity[botId].push({ d: day, p: Math.round(liveCum[botId] / LIVE_BASE * 10000) / 100 });
+    }
+
+    const p1Rows = db.prepare(`
+      SELECT paper_bot_id, exit_pnl_usd, closed_at FROM paper_positions
+      WHERE paper_bot_id LIKE 'P_Bot%' AND status='closed' ORDER BY closed_at ASC`).all();
+    const p1Equity = {}, p1Cum = {};
+    ['P_Bot1','P_Bot2','P_Bot3','P_Bot4','P_Bot5','P_Bot6','P_Bot7','P_Bot8']
+      .forEach(b => { p1Equity[b] = [{ d: 0, p: 0 }]; p1Cum[b] = 0; });
+    for (const pos of p1Rows) {
+      if (!p1Equity[pos.paper_bot_id]) continue;
+      p1Cum[pos.paper_bot_id] += Number(pos.exit_pnl_usd) || 0;
+      const day = Math.round((new Date(pos.closed_at).getTime() - SYSTEM_START_MS) / 864e5 * 100) / 100;
+      p1Equity[pos.paper_bot_id].push({ d: day, p: Math.round(p1Cum[pos.paper_bot_id] / PAPER_BASE * 10000) / 100 });
+    }
+
+    const p2Rows = db.prepare(`
+      SELECT paper_bot_id, exit_pnl_usd, closed_at FROM paper_positions
+      WHERE paper_bot_id LIKE 'P2_Bot%' AND status='closed' ORDER BY closed_at ASC`).all();
+    const p2Equity = {}, p2Cum = {};
+    ['P2_Bot1','P2_Bot2','P2_Bot3','P2_Bot4','P2_Bot5','P2_Bot6','P2_Bot7','P2_Bot8']
+      .forEach(b => { p2Equity[b] = [{ d: 0, p: 0 }]; p2Cum[b] = 0; });
+    for (const pos of p2Rows) {
+      if (!p2Equity[pos.paper_bot_id]) continue;
+      p2Cum[pos.paper_bot_id] += Number(pos.exit_pnl_usd) || 0;
+      const day = Math.round((new Date(pos.closed_at).getTime() - SYSTEM_START_MS) / 864e5 * 100) / 100;
+      p2Equity[pos.paper_bot_id].push({ d: day, p: Math.round(p2Cum[pos.paper_bot_id] / P2_BASE * 10000) / 100 });
+    }
+
+    db.close();
+    return { live: liveEquity, p1: p1Equity, p2: p2Equity };
+  } catch(e) { return { error: e.message }; }
+}
+
+function loadEquityDataToday(dbPath) {
+  try {
+    const Database = require('better-sqlite3');
+    const db = new Database(dbPath, { readonly: true });
+
+    const todayStartMs = new Date('2026-05-03T00:00:00.000Z').getTime();
+    const todayStartIso = '2026-05-03T00:00:00.000Z';
+
+    const LIVE_BASE  = Number(process.env.PORTFOLIO_BASELINE_USDT || 2799.94) / 8;
+    const PAPER_BASE = Number(process.env.PAPER_BASELINE_USDT  || 2756.68) / 8;
+    const P2_BASE    = Number(process.env.PAPER2_BASELINE_USDT || 2756.68) / 8;
+
+    const entries = db.prepare(`
+      SELECT id, bot_id, symbol, signal, notional_usd, qty, created_at
+      FROM order_attempts
+      WHERE signal LIKE 'ENTER%' AND signal NOT LIKE '%DCA_ADD%'
+        AND signal NOT LIKE '%CLOSE_FIRST%'
+        AND created_at >= '2026-04-24T19:09:00.000Z'
+      ORDER BY id ASC`).all();
+
+    const dcaRows = db.prepare(`
+      SELECT bot_id, symbol, notional_usd, created_at FROM order_attempts
+      WHERE signal LIKE '%DCA_ADD%' AND created_at >= '2026-04-24T19:09:00.000Z'
+      ORDER BY id ASC`).all();
+
+    const exitRows = db.prepare(`
+      SELECT bot_id, symbol, exit_reason, trigger_percent, close_percent, mark_price, created_at
+      FROM exit_events WHERE created_at >= ? ORDER BY id ASC`).all(todayStartIso);
+
+    const LIVE_BOTS = ['Bot1','Bot2','Bot3','Bot4','Bot5','Bot6','Bot7','Bot8'];
+    const liveEquity = {}, liveCum = {};
+    LIVE_BOTS.forEach(b => { liveEquity[b] = [{ d: 0, p: 0 }]; liveCum[b] = 0; });
+
+    for (let i = 0; i < entries.length; i++) {
+      const en = entries[i];
+      const botId = en.bot_id; const sym = en.symbol;
+      const isLong = en.signal.includes('LONG');
+      const qty = parseFloat(en.qty) || 0;
+      const ep = qty > 0 ? en.notional_usd / qty : 0;
+      const next = entries.slice(i + 1).find(e => e.bot_id === botId && e.symbol === sym);
+      const cutoff = next ? next.created_at : null;
+      const dca = dcaRows.filter(e => e.bot_id === botId && e.symbol === sym &&
+        e.created_at > en.created_at && (!cutoff || e.created_at <= cutoff));
+      const exs = exitRows.filter(e => e.bot_id === botId && e.symbol === sym &&
+        e.created_at > en.created_at && (!cutoff || e.created_at <= cutoff));
+      let notional = en.notional_usd;
+      dca.forEach(d => { notional += d.notional_usd; });
+      let pnl = 0, rem = 1.0, closed = false, exitAt = null;
+      for (const ex of exs) {
+        const cf = ex.close_percent / 100; const sf = cf * rem; const sn = notional * sf;
+        let slice;
+        if (ex.exit_reason === 'take_profit') slice = (ex.trigger_percent / 100) * sn;
+        else if (ex.exit_reason === 'stop_loss') slice = -(ex.trigger_percent / 100) * sn;
+        else { const mv = isLong ? (ex.mark_price - ep) / ep : (ep - ex.mark_price) / ep; slice = mv * sn; }
+        pnl += slice; rem -= sf; exitAt = ex.created_at;
+        if (ex.close_percent >= 100 || rem <= 0.001) { closed = true; break; }
+      }
+      if (!closed || !liveEquity[botId] || !exitAt) continue;
+      liveCum[botId] += pnl;
+      const hr = Math.round((new Date(exitAt).getTime() - todayStartMs) / 36e5 * 100) / 100;
+      liveEquity[botId].push({ d: hr, p: Math.round(liveCum[botId] / LIVE_BASE * 10000) / 100 });
+    }
+
+    const p1Rows = db.prepare(`
+      SELECT paper_bot_id, exit_pnl_usd, closed_at FROM paper_positions
+      WHERE paper_bot_id LIKE 'P_Bot%' AND status='closed' AND closed_at >= ?
+      ORDER BY closed_at ASC`).all(todayStartIso);
+    const p1Equity = {}, p1Cum = {};
+    ['P_Bot1','P_Bot2','P_Bot3','P_Bot4','P_Bot5','P_Bot6','P_Bot7','P_Bot8']
+      .forEach(b => { p1Equity[b] = [{ d: 0, p: 0 }]; p1Cum[b] = 0; });
+    for (const pos of p1Rows) {
+      if (!p1Equity[pos.paper_bot_id]) continue;
+      p1Cum[pos.paper_bot_id] += Number(pos.exit_pnl_usd) || 0;
+      const hr = Math.round((new Date(pos.closed_at).getTime() - todayStartMs) / 36e5 * 100) / 100;
+      p1Equity[pos.paper_bot_id].push({ d: hr, p: Math.round(p1Cum[pos.paper_bot_id] / PAPER_BASE * 10000) / 100 });
+    }
+
+    const p2Rows = db.prepare(`
+      SELECT paper_bot_id, exit_pnl_usd, closed_at FROM paper_positions
+      WHERE paper_bot_id LIKE 'P2_Bot%' AND status='closed' AND closed_at >= ?
+      ORDER BY closed_at ASC`).all(todayStartIso);
+    const p2Equity = {}, p2Cum = {};
+    ['P2_Bot1','P2_Bot2','P2_Bot3','P2_Bot4','P2_Bot5','P2_Bot6','P2_Bot7','P2_Bot8']
+      .forEach(b => { p2Equity[b] = [{ d: 0, p: 0 }]; p2Cum[b] = 0; });
+    for (const pos of p2Rows) {
+      if (!p2Equity[pos.paper_bot_id]) continue;
+      p2Cum[pos.paper_bot_id] += Number(pos.exit_pnl_usd) || 0;
+      const hr = Math.round((new Date(pos.closed_at).getTime() - todayStartMs) / 36e5 * 100) / 100;
+      p2Equity[pos.paper_bot_id].push({ d: hr, p: Math.round(p2Cum[pos.paper_bot_id] / P2_BASE * 10000) / 100 });
+    }
+
+    db.close();
+    return { live: liveEquity, p1: p1Equity, p2: p2Equity };
+  } catch(e) { return { error: e.message }; }
+}
+
+
+function loadCapitalPoolData(dbPath) {
+  try {
+    const Database = require('better-sqlite3');
+    const db = new Database(dbPath, { readonly: true });
+    const botEvents = db.prepare(`
+      SELECT cpe.* FROM capital_pool_events cpe
+      INNER JOIN (SELECT bot_id, MAX(id) AS max_id FROM capital_pool_events GROUP BY bot_id) latest
+        ON cpe.id = latest.max_id
+      ORDER BY cpe.bot_id ASC`).all();
+    const newest = db.prepare('SELECT * FROM capital_pool_events ORDER BY id DESC LIMIT 1').get();
+    const openP2 = db.prepare(
+      "SELECT paper_bot_id, symbol, notional_usd, side FROM paper_positions WHERE paper_bot_id LIKE 'P2_Bot%' AND status='open'"
+    ).all();
+    db.close();
+    return { botEvents, newest, openP2 };
+  } catch(e) { return { error: e.message }; }
+}
+
+function renderCapitalPoolPanel(cpData) {
+  if (!cpData || cpData.error || !cpData.newest) return '';
+  const { botEvents, newest, openP2 } = cpData;
+
+  const totalPot = newest.total_pot || 0;
+  const reserved = newest.reserved_capital || 0;
+  const available = newest.available_dynamic || 0;
+  const deployed = openP2.reduce((s, p) => s + (p.notional_usd || 0), 0);
+
+  const p2OpenMap = {};
+  openP2.forEach(p => {
+    const num = p.paper_bot_id.replace('P2_Bot', '');
+    p2OpenMap['Bot' + num] = p;
+  });
+
+  const eventMap = {};
+  botEvents.forEach(e => { eventMap[e.bot_id] = e; });
+
+  const usedPct = totalPot > 0 ? Math.round(deployed / totalPot * 1000) / 10 : 0;
+  const availPct = totalPot > 0 ? Math.round(available / totalPot * 1000) / 10 : 0;
+
+  const summaryHtml = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px;">
+    <div style="background:#0f172a;border-radius:8px;padding:8px 10px;text-align:center;"><div style="font-size:10px;color:#64748b;margin-bottom:2px;">Total Pool</div><div style="font-size:15px;font-weight:800;">${totalPot.toFixed(0)}</div><div style="font-size:10px;color:#475569;">USDT</div></div>
+    <div style="background:#0f172a;border-radius:8px;padding:8px 10px;text-align:center;"><div style="font-size:10px;color:#64748b;margin-bottom:2px;">Reserved 40%</div><div style="font-size:15px;font-weight:800;">${reserved.toFixed(0)}</div><div style="font-size:10px;color:#475569;">USDT</div></div>
+    <div style="background:#0f172a;border-radius:8px;padding:8px 10px;text-align:center;"><div style="font-size:10px;color:#64748b;margin-bottom:2px;">Available</div><div style="font-size:15px;font-weight:800;color:#86efac;">${available.toFixed(0)}</div><div style="font-size:10px;color:#475569;">${availPct}%</div></div>
+    <div style="background:#0f172a;border-radius:8px;padding:8px 10px;text-align:center;"><div style="font-size:10px;color:#64748b;margin-bottom:2px;">Deployed</div><div style="font-size:15px;font-weight:800;color:#f59e0b;">${deployed.toFixed(0)}</div><div style="font-size:10px;color:#475569;">${usedPct}%</div></div>
+  </div>`;
+
+  const BOT_ORDER = ['Bot1','Bot2','Bot3','Bot4','Bot5','Bot6','Bot7','Bot8'];
+  const TIER_COLORS = { HIGH: '#86efac', MED: '#fcd34d', LOW: '#94a3b8', BLOCK: '#fca5a5' };
+
+  const rows = BOT_ORDER.map(botId => {
+    const ev = eventMap[botId];
+    const openPos = p2OpenMap[botId];
+    const blocked = ev && ev.signal_type === 'BLOCKED';
+    const hasOpen = !!openPos;
+
+    let statusColor, statusText;
+    if (blocked) {
+      statusColor = '#fca5a5';
+      statusText = `BLOCKED — ${ev.block_reason || 'unknown'}`;
+    } else if (hasOpen) {
+      statusColor = '#f59e0b';
+      const dir = openPos.side === 'Buy' ? 'LONG' : 'SHORT';
+      statusText = `DEPLOYED — ${openPos.symbol} ${dir} $${openPos.notional_usd.toFixed(0)}`;
+    } else if (ev) {
+      statusColor = '#86efac';
+      statusText = 'IDLE';
+    } else {
+      statusColor = '#475569';
+      statusText = 'No events';
+    }
+
+    const tierColor = ev ? (TIER_COLORS[ev.score_tier] || '#94a3b8') : '#475569';
+
+    const scoreInfo = ev
+      ? `<span style="color:${tierColor};font-weight:600;">${ev.score_tier}</span> · V2:${ev.v2_score} V1:${ev.v1_score} · ${ev.symbol}`
+      : '';
+
+    const allocInfo = ev && !blocked && ev.notional_allocated > 0
+      ? `<span style="color:#64748b;">Base ${ev.base_allocation.toFixed(0)}</span> <span style="color:#f59e0b;">+Dyn ${ev.dynamic_allocation.toFixed(0)}</span> <span style="color:#94a3b8;">= ${ev.notional_allocated.toFixed(0)}</span>`
+      : '';
+
+    return `<div style="display:grid;grid-template-columns:52px 1fr auto;align-items:start;gap:8px;padding:8px 0;border-bottom:1px solid #1e293b;">
+      <div style="font-size:13px;font-weight:700;padding-top:1px;">${botId}</div>
+      <div>
+        <div style="font-size:12px;font-weight:600;color:${statusColor};">${statusText}</div>
+        ${scoreInfo ? `<div style="font-size:10px;color:#475569;margin-top:2px;">${scoreInfo}</div>` : ''}
+      </div>
+      <div style="font-size:10px;text-align:right;white-space:nowrap;padding-top:1px;">${allocInfo}</div>
+    </div>`;
+  }).join('');
+
+  return `<div style="margin-top:12px;padding:12px;background:#111827;border:1px solid #1f2937;border-radius:12px;">
+    <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Capital Pool Distribution</div>
+    ${summaryHtml}
+    <div>${rows}</div>
+  </div>`;
+}
+
 function renderBotCard(bot) {
   const enabled = bot.enabled ? 'Enabled' : 'Disabled';
   const balance = bot.balanceStatus === 'ok' && Number.isFinite(bot.balance)
@@ -379,10 +703,14 @@ function renderBotCard(bot) {
   if (bot.tradeState === 'Long' || bot.tradeState === 'Short') {
     const upnlColor = Number.isFinite(bot.unrealizedPnl) && bot.unrealizedPnl >= 0 ? '#86efac' : '#fca5a5';
     positionHtml = `<div class="bot-position">
-      ${bot.positionSize ? `<div class="pos-row"><span class="pos-key">Size</span><span>${bot.positionSize}</span></div>` : ''}
-      ${Number.isFinite(bot.avgEntryPrice) ? `<div class="pos-row"><span class="pos-key">Entry</span><span>${bot.avgEntryPrice.toPrecision(5)}</span></div>` : ''}
-      ${Number.isFinite(bot.markPrice) ? `<div class="pos-row"><span class="pos-key">Mark</span><span>${bot.markPrice.toPrecision(5)}</span></div>` : ''}
+      ${bot.positionNotional ? `<div class="pos-row"><span class="pos-key">Notional</span><span>$${bot.positionNotional.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>` : ''}
+      ${bot.positionMargin ? `<div class="pos-row"><span class="pos-key">Margin</span><span>$${bot.positionMargin.toFixed(2)}</span></div>` : ''}
+      ${bot.positionLeverage ? `<div class="pos-row"><span class="pos-key">Leverage</span><span>${bot.positionLeverage}x</span></div>` : ''}
+      ${bot.positionSizePct ? `<div class="pos-row"><span class="pos-key">Size</span><span>${bot.positionSizePct.toFixed(1)}% of acct</span></div>` : ''}
+      ${Number.isFinite(bot.avgEntryPrice) ? `<div class="pos-row"><span class="pos-key">Entry</span><span>${fmtPrice(bot.avgEntryPrice)}</span></div>` : ''}
+      ${Number.isFinite(bot.markPrice) ? `<div class="pos-row"><span class="pos-key">Mark</span><span>${fmtPrice(bot.markPrice)}</span></div>` : ''}
       ${Number.isFinite(bot.unrealizedPnl) ? `<div class="pos-row"><span class="pos-key">uPnL</span><span style="color:${upnlColor};font-weight:700;">${fmtPnl(bot.unrealizedPnl)}</span></div>` : ''}
+      ${(bot.remainingQtyPct !== null && bot.remainingQtyPct !== undefined) ? `<div class="pos-row"><span class="pos-key">Rem. qty</span><span>${bot.remainingQtyPct.toFixed(0)}%</span></div>` : ''}
       ${analysisBadgeHtml}
     </div>`;
   }
@@ -413,6 +741,25 @@ function renderBotCard(bot) {
     </div>`;
   }
 
+  // Paper positions section
+  let paperHtml = '';
+  if (bot.paperPositions && bot.paperPositions.length > 0) {
+    paperHtml = bot.paperPositions.map(pp => {
+      const ppUpnlColor = Number.isFinite(pp.unrealizedPnl) && pp.unrealizedPnl >= 0 ? '#86efac' : '#fca5a5';
+      const ppLabel = pp.paperBotId && pp.paperBotId.startsWith('P2_') ? 'P2 (scored)' : 'Paper';
+      return `<div class="bot-position" style="margin-top:4px;border-left:2px solid #1e40af;">
+        <div class="pos-row" style="margin-bottom:3px;"><span class="pos-key" style="color:#93c5fd;font-size:11px;">${ppLabel} · ${pp.side === 'Buy' ? 'LONG' : 'SHORT'}</span></div>
+        ${pp.notional ? `<div class="pos-row"><span class="pos-key">Notional</span><span>$${pp.notional.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>` : ''}
+        ${pp.margin ? `<div class="pos-row"><span class="pos-key">Margin</span><span>$${pp.margin.toFixed(2)}</span></div>` : ''}
+        ${pp.leverage ? `<div class="pos-row"><span class="pos-key">Leverage</span><span>${pp.leverage}x</span></div>` : ''}
+        ${Number.isFinite(pp.entryPrice) ? `<div class="pos-row"><span class="pos-key">Entry</span><span>${fmtPrice(pp.entryPrice)}</span></div>` : ''}
+        ${Number.isFinite(pp.markPrice) ? `<div class="pos-row"><span class="pos-key">Mark</span><span>${fmtPrice(pp.markPrice)}</span></div>` : ''}
+        ${Number.isFinite(pp.unrealizedPnl) ? `<div class="pos-row"><span class="pos-key">uPnL</span><span style="color:${ppUpnlColor};font-weight:700;">${fmtPnl(pp.unrealizedPnl)}</span></div>` : ''}
+        ${pp.remainingQtyPct !== null ? `<div class="pos-row"><span class="pos-key">Rem. qty</span><span>${Number(pp.remainingQtyPct).toFixed(0)}%</span></div>` : ''}
+      </div>`;
+    }).join('');
+  }
+
   return `<div class="bot-card${enabledClass}">
     <div class="bot-top">
       <div class="bot-name">${bot.botId}</div>
@@ -422,11 +769,12 @@ function renderBotCard(bot) {
     ${profileStr ? `<div class="bot-profile">${profileStr}</div>` : ''}
     <div class="bot-balance">${balance}</div>
     ${positionHtml}
+    ${paperHtml}
     ${statsHtml}
   </div>`;
 }
 
-function renderS2Page(status, tradeAssessments) {
+function renderS2Page(status, paperPortfolio, cpData) {
   const totals = status.totals || {};
   const bots = Array.isArray(status.bots) ? status.bots : [];
   const heartbeat = status.heartbeat || {};
@@ -435,7 +783,8 @@ function renderS2Page(status, tradeAssessments) {
   const mdxPanel = renderMdxPanel(status.mdx || null, status.reviewCriteria || []);
   const healthPanel = renderServiceHealthPanel(status.serviceHealth || null);
   const botCards = bots.map(renderBotCard).join('\n');
-  const assessmentPanel = renderTradeAssessmentsPanel(tradeAssessments || {});
+  const pp = paperPortfolio || {};
+  const cpPanel = renderCapitalPoolPanel(cpData || null);
 
   const CSS = `
     .wrap{padding:12px;max-width:480px;margin:0 auto;}
@@ -514,6 +863,36 @@ function renderS2Page(status, tradeAssessments) {
 
   const body = `<div class="wrap">
     ${mdxPanel}
+
+    <div style="margin-top:14px;">
+      <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #1e293b;">Strategy Portfolio Summary</div>
+      <div style="display:grid;gap:8px;">
+        <div style="background:#111827;border:1px solid #1f2937;border-radius:12px;padding:12px;">
+          <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">S2 Live System</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
+            <div style="background:#0f172a;border-radius:8px;padding:8px 10px;"><div style="font-size:11px;color:#64748b;">Starting</div><div style="font-size:14px;font-weight:700;margin-top:2px;">${(Number(process.env.PORTFOLIO_BASELINE_USDT||2799.94)).toFixed(0)} USDT</div></div>
+            <div style="background:#0f172a;border-radius:8px;padding:8px 10px;"><div style="font-size:11px;color:#64748b;">Current</div><div style="font-size:14px;font-weight:700;margin-top:2px;">${status.portfolio && status.portfolio.totalBalance > 0 ? status.portfolio.totalBalance.toFixed(0)+' USDT' : '–'}</div></div>
+            <div style="background:#0f172a;border-radius:8px;padding:8px 10px;"><div style="font-size:11px;color:#64748b;">P&L</div><div style="font-size:14px;font-weight:700;margin-top:2px;color:${(status.portfolio&&status.portfolio.totalBalance>0)?((status.portfolio.totalBalance-Number(process.env.PORTFOLIO_BASELINE_USDT||2799.94))>=0?'#86efac':'#fca5a5'):'#94a3b8'};">${status.portfolio&&status.portfolio.totalBalance>0?((status.portfolio.totalBalance-Number(process.env.PORTFOLIO_BASELINE_USDT||2799.94))>=0?'+':'')+((status.portfolio.totalBalance-Number(process.env.PORTFOLIO_BASELINE_USDT||2799.94)).toFixed(0))+' USDT':'–'}</div></div>
+          </div>
+        </div>
+        ${pp.p1 ? `<div style="background:#111827;border:1px solid #1f2937;border-radius:12px;padding:12px;">
+          <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">P1 Mirror (control)</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
+            <div style="background:#0f172a;border-radius:8px;padding:8px 10px;"><div style="font-size:11px;color:#64748b;">Starting</div><div style="font-size:14px;font-weight:700;margin-top:2px;">${pp.p1.start.toFixed(0)} USDT</div></div>
+            <div style="background:#0f172a;border-radius:8px;padding:8px 10px;"><div style="font-size:11px;color:#64748b;">Current</div><div style="font-size:14px;font-weight:700;margin-top:2px;">${pp.p1.current.toFixed(0)} USDT</div></div>
+            <div style="background:#0f172a;border-radius:8px;padding:8px 10px;"><div style="font-size:11px;color:#64748b;">P&L</div><div style="font-size:14px;font-weight:700;margin-top:2px;color:${pp.p1.pnl>=0?'#86efac':'#fca5a5'};">${pp.p1.pnl>=0?'+':''}${pp.p1.pnl.toFixed(0)} USDT</div></div>
+          </div>
+        </div>` : ''}
+        ${pp.p2 ? `<div style="background:#111827;border:1px solid #1f2937;border-radius:12px;padding:12px;">
+          <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">P2 Capital Pool</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
+            <div style="background:#0f172a;border-radius:8px;padding:8px 10px;"><div style="font-size:11px;color:#64748b;">Starting</div><div style="font-size:14px;font-weight:700;margin-top:2px;">${pp.p2.start.toFixed(0)} USDT</div></div>
+            <div style="background:#0f172a;border-radius:8px;padding:8px 10px;"><div style="font-size:11px;color:#64748b;">Current</div><div style="font-size:14px;font-weight:700;margin-top:2px;">${pp.p2.current.toFixed(0)} USDT</div></div>
+            <div style="background:#0f172a;border-radius:8px;padding:8px 10px;"><div style="font-size:11px;color:#64748b;">P&L</div><div style="font-size:14px;font-weight:700;margin-top:2px;color:${pp.p2.pnl>=0?'#86efac':'#fca5a5'};">${pp.p2.pnl>=0?'+':''}${pp.p2.pnl.toFixed(0)} USDT</div></div>
+          </div>
+        </div>` : ''}
+      </div>
+    </div>
     ${healthPanel}
     <div class="summary">
       <div class="summary-card"><div class="lbl">Bots</div><div class="val">${totals.bots || 0}</div></div>
@@ -543,8 +922,122 @@ function renderS2Page(status, tradeAssessments) {
       </div>
     </div>
     <div class="bot-list">${botCards || '<div class="bot-card">No bots found.</div>'}</div>
-    <div class="ta-section-head">Trade Assessment Log</div>
-    ${assessmentPanel}
+    ${cpPanel}
+
+    <div style="margin-top:20px;">
+      <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #1e293b;">Bot Equity Curves — % from activation</div>
+      <div style="display:grid;gap:10px;">
+        <div style="background:#111827;border:1px solid #1f2937;border-radius:12px;padding:14px;"><div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;">S2 Live System</div><canvas id="chart-live" style="width:100%;height:540px;display:block;"></canvas></div>
+        <div style="background:#111827;border:1px solid #1f2937;border-radius:12px;padding:14px;"><div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;">P1 Mirror (control)</div><canvas id="chart-p1" style="width:100%;height:540px;display:block;"></canvas></div>
+        <div style="background:#111827;border:1px solid #1f2937;border-radius:12px;padding:14px;"><div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;">P2 Capital Pool</div><canvas id="chart-p2" style="width:100%;height:540px;display:block;"></canvas></div>
+      </div>
+    </div>
+
+    <div style="margin-top:20px;">
+      <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #1e293b;">Bot Equity Curves — % since 3 May 2026</div>
+      <div style="display:grid;gap:10px;">
+        <div style="background:#111827;border:1px solid #1f2937;border-radius:12px;padding:14px;"><div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;">S2 Live — since 3 May</div><canvas id="chart-live-today" style="width:100%;height:540px;display:block;"></canvas></div>
+        <div style="background:#111827;border:1px solid #1f2937;border-radius:12px;padding:14px;"><div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;">P1 Mirror — since 3 May</div><canvas id="chart-p1-today" style="width:100%;height:540px;display:block;"></canvas></div>
+        <div style="background:#111827;border:1px solid #1f2937;border-radius:12px;padding:14px;"><div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;">P2 Capital Pool — since 3 May</div><canvas id="chart-p2-today" style="width:100%;height:540px;display:block;"></canvas></div>
+      </div>
+    </div>
+
+    <script>
+    (function(){
+      var COLORS=['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#ec4899'];
+      var BOT_LABELS={Bot1:'Bot1',Bot2:'Bot2',Bot3:'Bot3',Bot4:'Bot4',Bot5:'Bot5',Bot6:'Bot6',Bot7:'Bot7',Bot8:'Bot8',P_Bot1:'Bot1',P_Bot2:'Bot2',P_Bot3:'Bot3',P_Bot4:'Bot4',P_Bot5:'Bot5',P_Bot6:'Bot6',P_Bot7:'Bot7',P_Bot8:'Bot8',P2_Bot1:'Bot1',P2_Bot2:'Bot2',P2_Bot3:'Bot3',P2_Bot4:'Bot4',P2_Bot5:'Bot5',P2_Bot6:'Bot6',P2_Bot7:'Bot7',P2_Bot8:'Bot8'};
+      function drawChart(id,data,opts){
+        var canvas=document.getElementById(id); if(!canvas)return;
+        var dpr=window.devicePixelRatio||1;
+        var cssW=canvas.parentElement.clientWidth-28;
+        var cssH=canvas.offsetHeight||540;
+        canvas.width=Math.round(cssW*dpr); canvas.height=Math.round(cssH*dpr);
+        canvas.style.width=cssW+'px'; canvas.style.height=cssH+'px';
+        var ctx=canvas.getContext('2d'); ctx.scale(dpr,dpr);
+        var PAD={t:20,r:100,b:48,l:60};
+        var CW=cssW-PAD.l-PAD.r, CH=cssH-PAD.t-PAD.b;
+        var bots=Object.keys(data);
+        var allPts=bots.reduce(function(a,b){return a.concat(data[b]);}, []);
+        if(!allPts.length)return;
+        var maxDay=Math.max.apply(null,allPts.map(function(p){return p.d;}))||1;
+        maxDay=Math.ceil(maxDay)+0.3;
+        var minP=Math.min.apply(null,allPts.map(function(p){return p.p;}));
+        var maxP=Math.max.apply(null,allPts.map(function(p){return p.p;}));
+        minP=Math.min(minP,-2); maxP=Math.max(maxP,2);
+        var rawRng=maxP-minP;
+        var step=rawRng<=20?5:rawRng<=60?10:rawRng<=120?20:50;
+        var pad=step*Math.ceil(Math.abs(minP)/step);
+        minP=-pad; maxP=Math.max(maxP,pad);
+        var rng=maxP-minP||10;
+        function xs(d){return PAD.l+d/maxDay*CW;}
+        function ys(p){return PAD.t+CH-(p-minP)/rng*CH;}
+        ctx.fillStyle='#111827'; ctx.fillRect(0,0,cssW,cssH);
+        ctx.font='11px Inter,system-ui,sans-serif';
+        for(var p=minP;p<=maxP+0.01;p+=step){
+          var y=ys(p); if(y<PAD.t-2||y>PAD.t+CH+2)continue;
+          ctx.beginPath();ctx.moveTo(PAD.l,y);ctx.lineTo(PAD.l+CW,y);
+          ctx.strokeStyle=p===0?'#374151':'#1e293b'; ctx.lineWidth=p===0?1.5:0.75; ctx.stroke();
+          ctx.fillStyle=p===0?'#94a3b8':'#64748b'; ctx.textAlign='right';
+          ctx.fillText((p>=0?'+':'')+p+'%',PAD.l-8,y+4);
+        }
+        var isHour=opts&&opts.xLabel==='h';
+        var dayStep=isHour?(maxDay>20?6:maxDay>12?4:maxDay>6?2:1):(maxDay>10?3:maxDay>5?2:1);
+        for(var d=0;d<=maxDay;d+=dayStep){
+          var x=xs(d);
+          ctx.beginPath();ctx.moveTo(x,PAD.t);ctx.lineTo(x,PAD.t+CH);
+          ctx.strokeStyle='#1e293b'; ctx.lineWidth=0.75; ctx.stroke();
+          ctx.fillStyle='#64748b'; ctx.textAlign='center';
+          ctx.fillText(((opts&&opts.xLabel)||'d')+d,x,PAD.t+CH+18);
+        }
+        var startRef=opts&&opts.startIso?new Date(opts.startIso).getTime():new Date('2026-04-24T19:09:00.000Z').getTime();
+        var timeUnit=opts&&opts.xLabel==='h'?36e5:864e5;
+        var nowDay=(Date.now()-startRef)/timeUnit;
+        var nx=xs(nowDay);
+        if(nx>=PAD.l&&nx<=PAD.l+CW){
+          ctx.beginPath();ctx.moveTo(nx,PAD.t);ctx.lineTo(nx,PAD.t+CH);
+          ctx.strokeStyle='#374151'; ctx.lineWidth=1.5; ctx.setLineDash([5,4]); ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle='#4b5563'; ctx.textAlign='center'; ctx.font='10px Inter,system-ui,sans-serif';
+          ctx.fillText('now',nx,PAD.t-6); ctx.font='11px Inter,system-ui,sans-serif';
+        }
+        bots.forEach(function(bot,i){
+          var pts=data[bot]; if(!pts||pts.length<1)return;
+          ctx.beginPath();
+          pts.forEach(function(pt,j){var x=xs(pt.d),y=ys(pt.p);if(j===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);});
+          ctx.strokeStyle=COLORS[i%8]; ctx.lineWidth=2.5; ctx.stroke();
+          var last=pts[pts.length-1]; var lx=xs(last.d),ly=ys(last.p);
+          ctx.beginPath();ctx.arc(lx,ly,5,0,Math.PI*2); ctx.fillStyle=COLORS[i%8]; ctx.fill();
+          var lbl=(BOT_LABELS[bot]||bot)+' '+(last.p>=0?'+':'')+last.p.toFixed(1)+'%';
+          ctx.font='10px Inter,system-ui,sans-serif'; ctx.fillStyle=COLORS[i%8]; ctx.textAlign='left';
+          ctx.fillText(lbl,lx+9,ly+4); ctx.font='11px Inter,system-ui,sans-serif';
+        });
+        var legCols=Math.min(bots.length,8); var colW=Math.floor(CW/legCols); var legY=cssH-14;
+        bots.forEach(function(bot,i){
+          var lbl=BOT_LABELS[bot]||bot; var lx=PAD.l+i*colW;
+          ctx.fillStyle=COLORS[i%8]; ctx.fillRect(lx,legY-8,16,3);
+          ctx.fillStyle='#94a3b8'; ctx.textAlign='left'; ctx.font='11px Inter,system-ui,sans-serif';
+          ctx.fillText(lbl,lx+20,legY);
+        });
+      }
+      function loadCharts(){
+        fetch('/s2/equity-data').then(function(r){return r.json();}).then(function(d){
+          if(d.error){console.error('equity-data:',d.error);return;}
+          drawChart('chart-live',d.live);
+          drawChart('chart-p1',d.p1);
+          drawChart('chart-p2',d.p2);
+        }).catch(function(e){console.error('chart fetch:',e);});
+        fetch('/s2/equity-data-today').then(function(r){return r.json();}).then(function(d){
+          if(d.error){console.error('equity-data-today:',d.error);return;}
+          drawChart('chart-live-today',d.live,{xLabel:'h',startIso:'2026-05-03T00:00:00.000Z'});
+          drawChart('chart-p1-today',d.p1,{xLabel:'h',startIso:'2026-05-03T00:00:00.000Z'});
+          drawChart('chart-p2-today',d.p2,{xLabel:'h',startIso:'2026-05-03T00:00:00.000Z'});
+        }).catch(function(e){console.error('chart-today fetch:',e);});
+      }
+      loadCharts();
+      setInterval(loadCharts,60000);
+    })();
+    </script>
+
     <div class="generated">Updated ${status.generatedAt || 'n/a'}</div>
     <div class="freshness">Auto-refresh 15s · heartbeat stale after ${heartbeat.heartbeatStaleThresholdMinutes || 360}m</div>
   </div>`;
@@ -851,14 +1344,62 @@ async function handleRequest(req, res, options) {
     return;
   }
 
+  if (path === '/s2/equity-data') {
+    const dbPath = (options.mobileBotStatusOptions || {}).dbPath || '/home/ubuntu/.openclaw/workspace/Q_S2/data/s2.sqlite';
+    const data = loadEquityData(dbPath);
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    if (method !== 'HEAD') res.end(JSON.stringify(data)); else res.end();
+    return;
+  }
+
+  if (path === '/s2/equity-data-today') {
+    const dbPath = (options.mobileBotStatusOptions || {}).dbPath || '/home/ubuntu/.openclaw/workspace/Q_S2/data/s2.sqlite';
+    const LIVE_BASE  = Number(process.env.PORTFOLIO_BASELINE_USDT || 2799.94) / 8;
+    const PAPER_BASE = Number(process.env.PAPER_BASELINE_USDT  || 2756.68) / 8;
+    const P2_BASE    = Number(process.env.PAPER2_BASELINE_USDT || 2756.68) / 8;
+    const todayStartMs = new Date('2026-05-03T00:00:00.000Z').getTime();
+    const nowHr = Math.round((Date.now() - todayStartMs) / 36e5 * 100) / 100;
+    const [data, liveStatus] = await Promise.all([
+      Promise.resolve(loadEquityDataToday(dbPath)),
+      buildMobileBotStatus(options.mobileBotStatusOptions).catch(() => null),
+    ]);
+    if (!data.error && liveStatus && Array.isArray(liveStatus.bots)) {
+      liveStatus.bots.forEach(bot => {
+        if (bot.botId && data.live[bot.botId] && Number.isFinite(bot.unrealizedPnl) && bot.unrealizedPnl !== 0) {
+          const curve = data.live[bot.botId];
+          const lastP = curve.length > 0 ? curve[curve.length - 1].p : 0;
+          const unrealPct = Math.round(bot.unrealizedPnl / LIVE_BASE * 10000) / 100;
+          curve.push({ d: nowHr, p: Math.round((lastP + unrealPct) * 100) / 100, unreal: true });
+        }
+        if (Array.isArray(bot.paperPositions)) {
+          bot.paperPositions.forEach(pp => {
+            if (!pp.paperBotId || !Number.isFinite(pp.unrealizedPnl) || pp.unrealizedPnl === 0) return;
+            const isP2 = pp.paperBotId.startsWith('P2_');
+            const dataset = isP2 ? data.p2 : data.p1;
+            const base = isP2 ? P2_BASE : PAPER_BASE;
+            const curve = dataset && dataset[pp.paperBotId];
+            if (!curve) return;
+            const lastP = curve.length > 0 ? curve[curve.length - 1].p : 0;
+            const unrealPct = Math.round(pp.unrealizedPnl / base * 10000) / 100;
+            curve.push({ d: nowHr, p: Math.round((lastP + unrealPct) * 100) / 100, unreal: true });
+          });
+        }
+      });
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    if (method !== 'HEAD') res.end(JSON.stringify(data)); else res.end();
+    return;
+  }
+
   if (path === '/s2') {
     try {
-      const dbPath = (options.mobileBotStatusOptions || {}).dbPath || '/tmp/qs2_review/data/s2.sqlite';
-      const [status, tradeAssessments] = await Promise.all([
+      const dbPath = (options.mobileBotStatusOptions || {}).dbPath || '/home/ubuntu/.openclaw/workspace/Q_S2/data/s2.sqlite';
+      const [status, paperPortfolio, cpData] = await Promise.all([
         buildMobileBotStatus(options.mobileBotStatusOptions),
-        Promise.resolve(loadTradeAssessments(dbPath)),
+        Promise.resolve(loadPaperPortfolio(dbPath)),
+        Promise.resolve(loadCapitalPoolData(dbPath)),
       ]);
-      const html = renderS2Page(status, tradeAssessments);
+      const html = renderS2Page(status, paperPortfolio, cpData);
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       if (method !== 'HEAD') res.end(html);
       else res.end();

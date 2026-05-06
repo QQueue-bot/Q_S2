@@ -1,0 +1,24 @@
+{
+  "bots": [
+    { "paperBotId": "P_Bot1",  "liveBotId": "Bot1", "symbol": "DEEPUSDT",       "system": "v1" },
+    { "paperBotId": "P_Bot2",  "liveBotId": "Bot2", "symbol": "NEARUSDT",       "system": "v1" },
+    { "paperBotId": "P_Bot3",  "liveBotId": "Bot3", "symbol": "PAXGUSDT",       "system": "v1" },
+    { "paperBotId": "P_Bot4",  "liveBotId": "Bot4", "symbol": "ZECUSDT",        "system": "v1" },
+    { "paperBotId": "P_Bot5",  "liveBotId": "Bot5", "symbol": "WIFUSDT",        "system": "v1" },
+    { "paperBotId": "P_Bot6",  "liveBotId": "Bot6", "symbol": "IPUSDT",         "system": "v1" },
+    { "paperBotId": "P_Bot7",  "liveBotId": "Bot7", "symbol": "1000FLOKIUSDT",  "system": "v1" },
+    { "paperBotId": "P_Bot8",  "liveBotId": "Bot8", "symbol": "PUMPFUNUSDT",    "system": "v1" },
+    { "paperBotId": "P2_Bot1", "liveBotId": "Bot1", "symbol": "DEEPUSDT",       "system": "v2" },
+    { "paperBotId": "P2_Bot2", "liveBotId": "Bot2", "symbol": "NEARUSDT",       "system": "v2" },
+    { "paperBotId": "P2_Bot3", "liveBotId": "Bot3", "symbol": "PAXGUSDT",       "system": "v2" },
+    { "paperBotId": "P2_Bot4", "liveBotId": "Bot4", "symbol": "ZECUSDT",        "system": "v2" },
+    { "paperBotId": "P2_Bot5", "liveBotId": "Bot5", "symbol": "WIFUSDT",        "system": "v2" },
+    { "paperBotId": "P2_Bot6", "liveBotId": "Bot6", "symbol": "IPUSDT",         "system": "v2" },
+    { "paperBotId": "P2_Bot7", "liveBotId": "Bot7", "symbol": "1000FLOKIUSDT",  "system": "v2" },
+    { "paperBotId": "P2_Bot8", "liveBotId": "Bot8", "symbol": "PUMPFUNUSDT",    "system": "v2" }
+  ],
+  "v2Rules": {
+    "minS3Score": 45,
+    "minVolumeSpike": 0.3
+  }
+}

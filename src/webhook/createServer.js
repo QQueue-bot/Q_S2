@@ -8,6 +8,7 @@ const { createRiskEngine } = require('../risk/evaluateSignal');
 const { executePaperTrade, executeSignalClose } = require('../execution/bybitExecution');
 const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite');
 const { computeS3Score } = require('../scoring/computeS3Score');
+const { executePaperEntry, executePaperSignalClose, executePaperV2Entry, executePaperV2SignalClose } = require('../execution/paperExecution');
 
 function isHeartbeatSignal(input) {
   return typeof input === 'string' && input.trim().toUpperCase() === 'S2_HEARTBEAT';
@@ -139,7 +140,8 @@ function createWebhookServer(options = {}) {
 
         const riskEngine = createRiskEngine({ settingsPath: botContext.settingsPath, botContext, settings: botContext.settings });
         const risk = riskEngine.evaluate(parsedSignal);
-        logger.info('Risk evaluation result', { risk });
+        const { configValidation: _cv, ...loggableRisk } = risk;
+        logger.info('Risk evaluation result', { risk: loggableRisk });
 
         const isExitSignal = parsedSignal.signal === 'EXIT_LONG' || parsedSignal.signal === 'EXIT_SHORT';
 
@@ -159,6 +161,29 @@ function createWebhookServer(options = {}) {
               });
             }
           });
+
+          // Paper trade: mirror same entry signal
+          if (parsedSignal.signal === 'ENTER_LONG' || parsedSignal.signal === 'ENTER_SHORT') {
+            setImmediate(async () => {
+              try {
+                const paperResult = await executePaperEntry(parsedSignal, { dbPath, logger });
+                if (paperResult.ok) logger.info('[Paper] Entry queued', paperResult);
+              } catch (paperErr) {
+                logger.warn('[Paper] Entry error', { error: paperErr.message });
+              }
+            });
+
+            // P2 paper trade — S3 gated entry
+            setImmediate(async () => {
+              try {
+                const p2Result = await executePaperV2Entry(parsedSignal, { dbPath, logger });
+                if (p2Result.ok) logger.info('[P2] Entry queued', p2Result);
+                else if (p2Result.blocked) logger.info('[P2] Entry blocked', { reason: p2Result.reason, score: p2Result.score, volSpike: p2Result.volSpike });
+              } catch (p2Err) {
+                logger.warn('[P2] Entry error', { error: p2Err.message });
+              }
+            });
+          }
 
           // S3 shadow scoring — fire-and-forget, runs concurrently with execution.
           // Never gates or delays executePaperTrade. Scores ENTER signals only.
@@ -204,6 +229,26 @@ function createWebhookServer(options = {}) {
                 error: exitError.message,
                 parsedSignal,
               });
+            }
+          });
+
+          // Paper trade: mirror same exit signal
+          setImmediate(async () => {
+            try {
+              const paperExit = await executePaperSignalClose(parsedSignal, { dbPath, logger });
+              if (paperExit.ok) logger.info('[Paper] Exit queued', paperExit);
+            } catch (paperErr) {
+              logger.warn('[Paper] Exit error', { error: paperErr.message });
+            }
+          });
+
+          // P2 paper trade — mirror same exit signal
+          setImmediate(async () => {
+            try {
+              const p2Exit = await executePaperV2SignalClose(parsedSignal, { dbPath, logger });
+              if (p2Exit.ok) logger.info('[P2] Exit queued', p2Exit);
+            } catch (p2Err) {
+              logger.warn('[P2] Exit error', { error: p2Err.message });
             }
           });
         }

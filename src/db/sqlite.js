@@ -179,6 +179,43 @@ function initSchema(db) {
       reviewed_at TEXT
     );
 
+
+    CREATE TABLE IF NOT EXISTS paper_positions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL,
+      paper_bot_id TEXT NOT NULL,
+      live_bot_id TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      side TEXT NOT NULL,
+      signal TEXT NOT NULL,
+      entry_price REAL NOT NULL,
+      qty REAL NOT NULL,
+      notional_usd REAL NOT NULL,
+      remaining_qty_pct REAL NOT NULL DEFAULT 100,
+      be_armed INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'open',
+      exit_price REAL,
+      exit_reason TEXT,
+      exit_pnl_pct REAL,
+      exit_pnl_usd REAL,
+      closed_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS paper_tp_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL,
+      paper_position_id INTEGER NOT NULL,
+      paper_bot_id TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      action_key TEXT,
+      trigger_percent REAL,
+      close_percent REAL,
+      mark_price REAL,
+      qty_closed REAL,
+      pnl_pct REAL,
+      pnl_usd REAL
+    );
     CREATE TABLE IF NOT EXISTS signal_analysis (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       trade_id TEXT NOT NULL UNIQUE,
@@ -189,6 +226,27 @@ function initSchema(db) {
       analysis_text TEXT,
       chart_image_path TEXT,
       processed_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS capital_pool_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL,
+      bot_id TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      signal_type TEXT NOT NULL,
+      v2_score REAL,
+      v1_score REAL,
+      score_tier TEXT,
+      total_pot REAL NOT NULL,
+      reserved_capital REAL NOT NULL,
+      deployed_capital REAL NOT NULL,
+      available_dynamic REAL NOT NULL,
+      base_allocation REAL,
+      dynamic_allocation REAL,
+      notional_allocated REAL,
+      stage1_notional REAL,
+      block_reason TEXT,
+      details_json TEXT
     );
   `);
 
@@ -480,6 +538,89 @@ function buildPersistence(db) {
     },
     getPendingTradeAssessments() {
       return db.prepare('SELECT * FROM trade_assessments WHERE post_trade_text IS NULL ORDER BY id DESC').all();
+    },
+
+    insertPaperPosition(row) {
+      return db.prepare(`
+        INSERT INTO paper_positions (
+          created_at, paper_bot_id, live_bot_id, symbol, side, signal,
+          entry_price, qty, notional_usd
+        ) VALUES (
+          @created_at, @paper_bot_id, @live_bot_id, @symbol, @side, @signal,
+          @entry_price, @qty, @notional_usd
+        )
+      `).run(row);
+    },
+    getOpenPaperPosition(paperBotId) {
+      return db.prepare("SELECT * FROM paper_positions WHERE paper_bot_id = ? AND status = 'open' ORDER BY id DESC LIMIT 1").get(paperBotId) || null;
+    },
+    getAllOpenPaperPositions() {
+      return db.prepare("SELECT * FROM paper_positions WHERE status = 'open' ORDER BY id ASC").all();
+    },
+    getClosedPaperPositions() {
+      return db.prepare("SELECT * FROM paper_positions WHERE status = 'closed' ORDER BY id DESC").all();
+    },
+    closePaperPosition({ id, exit_price, exit_reason, exit_pnl_pct, exit_pnl_usd, closed_at }) {
+      return db.prepare(`
+        UPDATE paper_positions SET status = 'closed', exit_price = ?, exit_reason = ?,
+          exit_pnl_pct = ?, exit_pnl_usd = ?, closed_at = ? WHERE id = ?
+      `).run(exit_price, exit_reason, exit_pnl_pct, exit_pnl_usd, closed_at, id);
+    },
+    updatePaperPositionRemainingQty(id, remaining_qty_pct) {
+      return db.prepare('UPDATE paper_positions SET remaining_qty_pct = ? WHERE id = ?').run(remaining_qty_pct, id);
+    },
+    armPaperBreakEven(id) {
+      return db.prepare('UPDATE paper_positions SET be_armed = 1 WHERE id = ?').run(id);
+    },
+    insertPaperTpEvent(row) {
+      return db.prepare(`
+        INSERT INTO paper_tp_events (
+          created_at, paper_position_id, paper_bot_id, symbol, event_type,
+          action_key, trigger_percent, close_percent, mark_price, qty_closed, pnl_pct, pnl_usd
+        ) VALUES (
+          @created_at, @paper_position_id, @paper_bot_id, @symbol, @event_type,
+          @action_key, @trigger_percent, @close_percent, @mark_price, @qty_closed, @pnl_pct, @pnl_usd
+        )
+      `).run({ ...row, action_key: row.action_key || null });
+    },
+    paperTpEventExists(paperPositionId, actionKey) {
+      return Boolean(db.prepare('SELECT id FROM paper_tp_events WHERE paper_position_id = ? AND action_key = ?').get(paperPositionId, actionKey));
+    },
+    getPaperPositionTotalPnl(paperPositionId) {
+      const rows = db.prepare('SELECT pnl_usd FROM paper_tp_events WHERE paper_position_id = ? AND pnl_usd IS NOT NULL').all(paperPositionId);
+      return rows.reduce((s, r) => s + (Number(r.pnl_usd) || 0), 0);
+    },
+    getAllPaperPositions(limit = 50) {
+      return db.prepare('SELECT * FROM paper_positions ORDER BY id DESC LIMIT ?').all(limit);
+    },
+
+    insertCapitalPoolEvent(row) {
+      return db.prepare(`
+        INSERT INTO capital_pool_events (
+          created_at, bot_id, symbol, signal_type, v2_score, v1_score, score_tier,
+          total_pot, reserved_capital, deployed_capital, available_dynamic,
+          base_allocation, dynamic_allocation, notional_allocated, stage1_notional,
+          block_reason, details_json
+        ) VALUES (
+          @created_at, @bot_id, @symbol, @signal_type, @v2_score, @v1_score, @score_tier,
+          @total_pot, @reserved_capital, @deployed_capital, @available_dynamic,
+          @base_allocation, @dynamic_allocation, @notional_allocated, @stage1_notional,
+          @block_reason, @details_json
+        )
+      `).run(row);
+    },
+
+    getCapitalPoolEvents(limit = 100) {
+      return db.prepare('SELECT * FROM capital_pool_events ORDER BY id DESC LIMIT ?').all(limit);
+    },
+
+    getCapitalPoolEventsToday() {
+      const today = new Date().toISOString().slice(0, 10);
+      return db.prepare("SELECT * FROM capital_pool_events WHERE created_at >= ? ORDER BY id DESC").all(today);
+    },
+
+    getOpenP2Positions() {
+      return db.prepare("SELECT * FROM paper_positions WHERE status = 'open' AND paper_bot_id LIKE 'P2_Bot%' ORDER BY id ASC").all();
     },
   };
 }

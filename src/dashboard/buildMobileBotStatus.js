@@ -86,6 +86,11 @@ async function fetchBotStatus(bot, registryPath, envPath) {
     let positionSize = null;
     let avgEntryPrice = null;
     let markPrice = null;
+    let positionNotional = null;
+    let positionMargin = null;
+    let positionLeverage = null;
+    let positionSizePct = null;
+    let remainingQtyPct = null;
     const pos = position?.result?.list?.[0];
     if (position?.retCode === 0 && pos && Number(pos.size || 0) > 0) {
       tradeState = pos.side === 'Buy' ? 'Long' : pos.side === 'Sell' ? 'Short' : 'In Trade';
@@ -93,6 +98,13 @@ async function fetchBotStatus(bot, registryPath, envPath) {
       positionSize = pos.size || null;
       avgEntryPrice = pos.avgPrice ? Number(pos.avgPrice) : null;
       markPrice = pos.markPrice ? Number(pos.markPrice) : null;
+      positionNotional = pos.positionValue ? Number(pos.positionValue) : null;
+      positionMargin = pos.positionIM ? Number(pos.positionIM) : null;
+      positionLeverage = pos.leverage ? Number(pos.leverage) : null;
+      if (positionMargin !== null && balance !== null && balance > 0) {
+        positionSizePct = (positionMargin / balance) * 100;
+      }
+      remainingQtyPct = 100;
     }
 
     return {
@@ -108,6 +120,11 @@ async function fetchBotStatus(bot, registryPath, envPath) {
       positionSize,
       avgEntryPrice,
       markPrice,
+      positionNotional,
+      positionMargin,
+      positionLeverage,
+      positionSizePct,
+      remainingQtyPct,
     };
   } catch (error) {
     return {
@@ -123,6 +140,11 @@ async function fetchBotStatus(bot, registryPath, envPath) {
       positionSize: null,
       avgEntryPrice: null,
       markPrice: null,
+      positionNotional: null,
+      positionMargin: null,
+      positionLeverage: null,
+      positionSizePct: null,
+      remainingQtyPct: null,
       error: error.message,
     };
   }
@@ -232,6 +254,8 @@ function loadHeartbeatStatus(dbPath) {
 // Uses: gain = position_notional_at_entry * trigger_pct / 100
 // where entry_notional ≈ qty * mark_price / (1 + trigger_pct/100)
 function approxExitPnl(exit) {
+  // For signal_exit/break_even: use pre-computed P&L from entry price lookup
+  if (exit.computedPnlUsd !== undefined) return exit.computedPnlUsd;
   const qty = Number(exit.qty) || 0;
   const mp = Number(exit.mark_price) || 0;
   const pct = Math.abs(Number(exit.trigger_percent) || 0);
@@ -265,6 +289,31 @@ function loadBotTradeStats(db, botId, symbol = null) {
       ORDER BY id DESC
     `).all(botId);
 
+    // For signal_exit/break_even (trigger_percent=0), compute actual P&L
+    // from entry price (notional_usd/qty) vs exit mark_price
+    const entryOrders = db.prepare(`
+      SELECT created_at, signal, notional_usd, qty
+      FROM order_attempts
+      WHERE bot_id = ? AND signal LIKE 'ENTER%'
+        AND signal NOT LIKE '%DCA_ADD%' AND signal NOT LIKE '%CLOSE_FIRST%'
+        AND created_at >= '${SYSTEM_RESET_AT}'
+      ORDER BY id ASC
+    `).all(botId);
+
+    const augmentedExits = exits.map(ex => {
+      if (ex.trigger_percent !== 0) return ex;
+      const matchEntry = entryOrders.filter(e => e.created_at < ex.created_at).pop();
+      if (!matchEntry) return ex;
+      const entryQty = parseFloat(matchEntry.qty);
+      if (!entryQty || !matchEntry.notional_usd) return ex;
+      const entryPrice = matchEntry.notional_usd / entryQty;
+      const isLong = matchEntry.signal.includes('LONG');
+      const moveFrac = isLong
+        ? (ex.mark_price - entryPrice) / entryPrice
+        : (entryPrice - ex.mark_price) / entryPrice;
+      return { ...ex, computedPnlUsd: moveFrac * matchEntry.notional_usd };
+    });
+
     const lastSignal = db.prepare(`
       SELECT received_at, signal, raw_input
       FROM normalized_signals WHERE bot_id = ? AND received_at >= '${SYSTEM_RESET_AT}'
@@ -285,9 +334,9 @@ function loadBotTradeStats(db, botId, symbol = null) {
         `).get(botId) || null;
 
     return {
-      allTime: calcTradeStats(exits),
-      today: calcTradeStats(exits.filter(e => e.created_at >= todayStr)),
-      sevenDay: calcTradeStats(exits.filter(e => e.created_at >= sevenDaysAgoStr)),
+      allTime: calcTradeStats(augmentedExits),
+      today: calcTradeStats(augmentedExits.filter(e => e.created_at >= todayStr)),
+      sevenDay: calcTradeStats(augmentedExits.filter(e => e.created_at >= sevenDaysAgoStr)),
       lastSignal: lastSignal
         ? { ...lastSignal, ageMinutes: minutesAgo(lastSignal.received_at) }
         : null,
@@ -430,11 +479,64 @@ async function buildMobileBotStatus(options = {}) {
       ? Number(process.env.PORTFOLIO_BASELINE_USDT)
       : null;
     reviewCriteria = loadPortfolioReviewCriteria(db, bots, portfolioBaseline);
-    botsWithStats = bots.map(bot => ({
-      ...bot,
-      tradeStats: tradeStatsByBot[bot.botId] || null,
-      signalAnalysis: loadBotSignalAnalysis(db, bot.botId, bot.symbol),
-    }));
+    // Load open paper positions for each live bot
+    const openPaperByLiveBot = {};
+    try {
+      const allOpenPaper = db.prepare(
+        'SELECT paper_bot_id, live_bot_id, symbol, side, entry_price, qty, notional_usd, remaining_qty_pct ' +
+        'FROM paper_positions WHERE closed_at IS NULL ORDER BY created_at DESC'
+      ).all();
+      for (const pos of allOpenPaper) {
+        if (!openPaperByLiveBot[pos.live_bot_id]) openPaperByLiveBot[pos.live_bot_id] = [];
+        openPaperByLiveBot[pos.live_bot_id].push(pos);
+      }
+    } catch {}
+
+    botsWithStats = bots.map(bot => {
+      const rawPaperPositions = openPaperByLiveBot[bot.botId] || [];
+      const paperPositions = rawPaperPositions.map(pos => {
+        const entryPrice = Number(pos.entry_price);
+        // Use live bot mark price if available (same symbol); fallback to latest price tick
+        let markPriceForPaper = bot.markPrice || null;
+        if (!markPriceForPaper) {
+          try {
+            const tick = db.prepare(
+              'SELECT last_price FROM price_ticks WHERE symbol = ? ORDER BY id DESC LIMIT 1'
+            ).get(pos.symbol);
+            if (tick) markPriceForPaper = Number(tick.last_price);
+          } catch {}
+        }
+        let paperUPnl = null;
+        if (markPriceForPaper !== null) {
+          const remainFrac = (pos.remaining_qty_pct || 100) / 100;
+          const notionalRem = Number(pos.notional_usd) * remainFrac;
+          const moveFrac = pos.side === 'Buy'
+            ? (markPriceForPaper - entryPrice) / entryPrice
+            : (entryPrice - markPriceForPaper) / entryPrice;
+          paperUPnl = moveFrac * notionalRem;
+        }
+        const paperLev = bot.leverage;
+        const paperMargin = paperLev ? Number(pos.notional_usd) / paperLev : null;
+        return {
+          paperBotId: pos.paper_bot_id,
+          symbol: pos.symbol,
+          side: pos.side,
+          entryPrice,
+          markPrice: markPriceForPaper,
+          notional: Number(pos.notional_usd),
+          margin: paperMargin,
+          leverage: paperLev,
+          remainingQtyPct: pos.remaining_qty_pct || 100,
+          unrealizedPnl: paperUPnl,
+        };
+      });
+      return {
+        ...bot,
+        tradeStats: tradeStatsByBot[bot.botId] || null,
+        signalAnalysis: loadBotSignalAnalysis(db, bot.botId, bot.symbol),
+        paperPositions: paperPositions.length > 0 ? paperPositions : null,
+      };
+    });
     db.close();
   } catch {}
 

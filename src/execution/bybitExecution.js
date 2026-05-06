@@ -608,10 +608,15 @@ async function executePaperTrade(parsedSignal, options = {}) {
   const lot = instrument.lotSizeFilter;
   const actualAccountBalanceUsd = await getAvailableAccountBalance(credentials, { bybitBaseUrl });
   const effectiveAccountBalanceUsd = Math.min(actualAccountBalanceUsd, 5000);
+  // Per-bot MDX leverage; accountPercent=100 since each bot uses its own Bybit sub-account
+  const botSizingCtx = resolveBotSettings(parsedSignal.botId, {
+    registryPath: path.join(__dirname, '..', '..', 'config', 'bots.json'),
+  });
+  const botLeverage = botSizingCtx.settings.positionSizing.leverage;
   const sizing = computeOrderSizing({
     effectiveAccountBalanceUsd,
-    accountPercent: settings.positionSizing.accountPercent,
-    leverage: settings.positionSizing.leverage,
+    accountPercent: 100,
+    leverage: botLeverage,
     referencePrice: latestTick.last_price,
     qtyStep: Number(lot.qtyStep),
     minOrderQty: Number(lot.minOrderQty),
@@ -627,7 +632,9 @@ async function executePaperTrade(parsedSignal, options = {}) {
   const delayCandles = impulse.impulsive ? dcaStrategy.addTiming.maxDelayCandles : dcaStrategy.addTiming.minDelayCandles;
   const candleDurationSeconds = options.candleDurationSeconds ?? 60;
   const stageDelaySeconds = delayCandles * candleDurationSeconds;
-  const stageOneQty = computeCloseQty(sizing.qty, dcaStrategy.entries.initialEntryPercent, Number(lot.qtyStep));
+  // Enter full position when DCA disabled; only split when DCA actively enabled
+  const initialEntryPct = dcaStrategy.enabled ? dcaStrategy.entries.initialEntryPercent : 100;
+  const stageOneQty = computeCloseQty(sizing.qty, initialEntryPct, Number(lot.qtyStep));
   const stageTwoQtyRaw = Number(sizing.qty) - Number(stageOneQty);
   const stageTwoQty = stageTwoQtyRaw.toFixed(decimalPlaces(Number(lot.qtyStep)));
 

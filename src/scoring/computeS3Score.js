@@ -177,6 +177,100 @@ function scoreSupResStub() {
   return { score: NEUTRAL_SCORE, value: null, note: 'stub_v1' };
 }
 
+
+// ---------------------------------------------------------------------------
+// V2 recalibrated component functions — run in parallel with v1 for comparison.
+// Do NOT replace v1 functions — both versions are logged side-by-side.
+// ---------------------------------------------------------------------------
+
+// RSI v2: finer buckets, ceiling raised to 0.95, avoids huge neutral zone.
+function scoreRsiV2(rsi, signal) {
+  if (rsi === null) return 0.50;
+  const isLong = signal === 'ENTER_LONG';
+  if (isLong) {
+    if (rsi <= 20)       return 0.95;
+    else if (rsi <= 30)  return 0.85;
+    else if (rsi <= 40)  return 0.75;
+    else if (rsi <= 50)  return 0.60;
+    else if (rsi <= 60)  return 0.40;
+    else if (rsi <= 70)  return 0.25;
+    else                 return 0.10;
+  } else {
+    if (rsi >= 80)       return 0.10;
+    else if (rsi >= 70)  return 0.25;
+    else if (rsi >= 60)  return 0.40;
+    else if (rsi >= 50)  return 0.60;
+    else if (rsi >= 40)  return 0.75;
+    else if (rsi >= 30)  return 0.85;
+    else                 return 0.95;
+  }
+}
+
+// VolumeSpike v2: lower floor (0.10), neutral at 1.0, punishes drying volume.
+function scoreVolumeSpikeV2(candlesOldFirst) {
+  if (candlesOldFirst.length < 6) return 0.50;
+  const lastVol = Number(candlesOldFirst[candlesOldFirst.length - 1][5]);
+  const priorVols = candlesOldFirst.slice(-6, -1).map(c => Number(c[5]));
+  const avgPrior = priorVols.reduce((a, b) => a + b, 0) / priorVols.length;
+  if (avgPrior === 0) return 0.50;
+  const ratio = lastVol / avgPrior;
+  if (ratio >= 3.0)  return 1.00;
+  if (ratio >= 2.0)  return 0.85;
+  if (ratio >= 1.5)  return 0.70;
+  if (ratio >= 1.0)  return 0.50;
+  if (ratio >= 0.6)  return 0.30;
+  return 0.10;
+}
+
+// HTF trend v2: graduated by distance magnitude (0.10–0.90) instead of binary.
+function scoreHtfTrendV2(htfCandlesOldFirst, currentPrice, signal) {
+  if (htfCandlesOldFirst.length < 2 || !currentPrice) return 0.50;
+  const closes = htfCandlesOldFirst.map(c => Number(c[4]));
+  const sma = closes.reduce((a, b) => a + b, 0) / closes.length;
+  const distancePct = ((currentPrice - sma) / sma) * 100;
+  const isLong = signal === 'ENTER_LONG';
+  if (isLong) {
+    if (distancePct > 5)         return 0.90;
+    else if (distancePct > 2)    return 0.80;
+    else if (distancePct > 0.5)  return 0.65;
+    else if (distancePct > 0)    return 0.40;
+    else                         return 0.10;
+  } else {
+    if (distancePct < -5)        return 0.90;
+    else if (distancePct < -2)   return 0.80;
+    else if (distancePct < -0.5) return 0.65;
+    else if (distancePct < 0)    return 0.40;
+    else                         return 0.10;
+  }
+}
+
+// WinLossStreak v2: identical bands but FIXES isWin() to match actual DB values.
+function scoreWinLossStreakV2(recentExits) {
+  if (!recentExits || recentExits.length === 0) {
+    return 0.50;
+  }
+  // Fixed: DB stores 'take_profit' and 'break_even', not 'TP' or 'BREAK_EVEN'
+  const isWin = exit =>
+    exit.exit_reason === 'take_profit' || exit.exit_reason === 'break_even';
+  const firstIsWin = isWin(recentExits[0]);
+  let streak = 0;
+  for (const exit of recentExits) {
+    if (isWin(exit) === firstIsWin) streak++;
+    else break;
+  }
+  if (firstIsWin) {
+    if (streak >= 5) return 0.85;
+    if (streak >= 3) return 0.75;
+    if (streak >= 2) return 0.65;
+    return 0.55;
+  } else {
+    if (streak >= 5) return 0.20;
+    if (streak >= 3) return 0.30;
+    if (streak >= 2) return 0.40;
+    return 0.45;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Main entry point
 //
@@ -256,11 +350,40 @@ async function computeS3Score({ signal, botId, symbol, db, s3Config, bybitBaseUr
   const weightedSum  = Object.values(components).reduce((sum, c) => sum + c.score * c.weight, 0);
   const score = totalWeight > 0 ? Math.round((weightedSum / totalWeight) * 100) : 50;
 
+  // V2 recalibrated score — runs alongside v1, logged in components._meta
+  const rsiV2s   = scoreRsiV2(rsi, signal);
+  const volV2s   = scoreVolumeSpikeV2(candles);
+  const htfV2s   = scoreHtfTrendV2(htfCandles, currentPrice, signal);
+  const strV2s   = scoreWinLossStreakV2(recentExits);
+  // VWAP v2 uses same function as v1 (already correct)
+  const vwapV2s  = vwapResult.score;
+
+  const v2Weights = weights; // same weights for now
+  const v2Sum = rsiV2s * v2Weights.rsi + vwapV2s * v2Weights.vwap +
+                volV2s * v2Weights.volumeSpike + htfV2s * v2Weights.htfTrend +
+                strV2s * v2Weights.winLossStreak;
+  const v2TotalW = v2Weights.rsi + v2Weights.vwap + v2Weights.volumeSpike +
+                   v2Weights.htfTrend + v2Weights.winLossStreak;
+  const scoreV2 = v2TotalW > 0 ? Math.round((v2Sum / v2TotalW) * 100) : 50;
+
+  // Attach v2 metadata into components for DB logging (no schema change needed)
+  components._meta = {
+    scoreV2,
+    v2Components: {
+      rsi:         { score: rsiV2s,  value: rsiResult.value },
+      vwap:        { score: vwapV2s, value: vwapResult.value },
+      volumeSpike: { score: volV2s,  value: volResult.value },
+      htfTrend:    { score: htfV2s,  value: htfResult.value },
+      winLossStreak: { score: strV2s, value: streakResult.value },
+    },
+  };
+
   return {
     botId,
     symbol,
     signal,
     score,
+    scoreV2,
     components,
     latencyMs: Date.now() - startMs,
     scoredAt,

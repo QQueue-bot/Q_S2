@@ -435,6 +435,20 @@ function renderMobileBotStatusHtml(status = {}) {
     </div>`;
   }).join('\n');
 
+  const portfolio = status.portfolio || {};
+  const baseline = Number(process.env.PORTFOLIO_BASELINE_USDT) || 0;
+  const totalNow = Number.isFinite(portfolio.totalBalance) ? portfolio.totalBalance : null;
+  const totalUpnl = Number.isFinite(portfolio.totalUnrealizedPnl) ? portfolio.totalUnrealizedPnl : 0;
+  const pnl = (totalNow !== null && baseline > 0) ? (totalNow - baseline) : null;
+  const pnlPct = (pnl !== null && baseline > 0) ? (pnl / baseline * 100) : null;
+  const pnlSign = pnl !== null ? (pnl >= 0 ? '+' : '') : '';
+  const pnlClass = pnl === null ? 'neu' : (pnl >= 0 ? 'pos' : 'neg');
+  const portfolioHtml = [
+    `<div class="pb-item"><div class="pb-label">Starting</div><div class="pb-val neu">${baseline > 0 ? baseline.toFixed(0) + ' USDT' : 'n/a'}</div></div>`,
+    `<div class="pb-item"><div class="pb-label">Now</div><div class="pb-val neu">${totalNow !== null ? totalNow.toFixed(0) + ' USDT' : 'n/a'}</div></div>`,
+    `<div class="pb-item"><div class="pb-label">P&amp;L</div><div class="pb-val ${pnlClass}">${pnl !== null ? pnlSign + pnl.toFixed(0) + ' USDT' + (pnlPct !== null ? '<br><span style="font-size:13px">' + pnlSign + pnlPct.toFixed(1) + '%</span>' : '') : 'n/a'}</div></div>`,
+  ].join('\n      ');
+
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -467,6 +481,13 @@ function renderMobileBotStatusHtml(status = {}) {
     .upnl-neutral { color: #94a3b8; }
     .generated { font-size: 12px; opacity: 0.6; text-align: center; margin-top: 12px; }
     .freshness { font-size: 12px; text-align: center; margin-top: 6px; color: #93c5fd; }
+    .portfolio-bar { background: #0f2440; border: 1px solid #1e3a5f; border-radius: 12px; padding: 12px 16px; margin-bottom: 12px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .portfolio-bar .pb-item { text-align: center; }
+    .portfolio-bar .pb-label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: .05em; }
+    .portfolio-bar .pb-val { font-size: 18px; font-weight: 800; margin-top: 3px; }
+    .portfolio-bar .pb-val.pos { color: #86efac; }
+    .portfolio-bar .pb-val.neg { color: #fca5a5; }
+    .portfolio-bar .pb-val.neu { color: #e2e8f0; }
     .heartbeat { background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 12px; margin-bottom: 12px; }
     .heartbeat .label { font-size: 12px; opacity: 0.8; }
     .heartbeat .value { font-size: 15px; font-weight: 700; margin-top: 3px; }
@@ -479,6 +500,9 @@ function renderMobileBotStatusHtml(status = {}) {
 </head>
 <body>
   <div class="wrap">
+    <div class="portfolio-bar">
+      ${portfolioHtml}
+    </div>
     <div class="summary">
       <div class="summary-card"><div class="label">Bots</div><div class="value">${totals.bots || 0}</div></div>
       <div class="summary-card"><div class="label">Enabled</div><div class="value">${totals.enabled || 0}</div></div>
