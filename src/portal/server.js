@@ -681,6 +681,9 @@ function renderBotCard(bot) {
   const profileStr = bot.mdxProfile
     ? `${bot.mdxProfile.charAt(0).toUpperCase() + bot.mdxProfile.slice(1)}${bot.leverage ? ` · ${bot.leverage}x` : ''}`
     : '';
+  const pausedBadge = !bot.enabled
+    ? `<span style="background:#92400e22;color:#f59e0b;font-size:11px;font-weight:800;padding:2px 8px;border-radius:4px;letter-spacing:.04em;border:1px solid #92400e55;">PAUSED</span>`
+    : '';
 
   // Signal analysis badge (S6 directive)
   const sa = bot.signalAnalysis;
@@ -763,6 +766,7 @@ function renderBotCard(bot) {
   return `<div class="bot-card${enabledClass}">
     <div class="bot-top">
       <div class="bot-name">${bot.botId}</div>
+      ${pausedBadge}
       <div class="bot-state ${stateClass}">${bot.tradeState}</div>
     </div>
     <div class="bot-meta">${enabled} · ${bot.symbol || 'n/a'}</div>

@@ -4,14 +4,14 @@
     "asset": "PAXG"
   },
   "signalBotSourceMeta": {
-    "optimizedPeriod": "2026-04-08 refresh",
+    "optimizedPeriod": "2026-05-06 MDX update",
     "exchange": "Bybit",
-    "timeframe": "130m",
-    "signalSetting": 4,
-    "baseline": "EMA",
-    "baselineValue": 34,
+    "timeframe": "185m",
+    "signalSetting": 3,
+    "baseline": "TMA",
+    "baselineValue": 35,
     "slType": "ATR",
-    "slValue": 6.2
+    "slValue": 5
   },
   "sourcePerformanceMeta": {
     "performance30d": 12.39,
@@ -41,11 +41,11 @@
     },
     "balanced": {
       "strategy": {
-        "tpTargetsPercent": [0.4, 0.98, 1.73, 3.17, 5.11, 10.64],
-        "tpAllocationsPercent": [8, 21, 21, 21, 13, 16],
-        "stopLossPercent": 5,
-        "slToBeTrigger": "TP2",
-        "leverage": 8
+        "tpTargetsPercent": [0.28, 0.71, 1.0, 1.76, 2.95, 6.59],
+        "tpAllocationsPercent": [13, 18, 22, 22, 16, 9],
+        "stopLossPercent": 3,
+        "slToBeTrigger": "TP1",
+        "leverage": 7
       },
       "performanceMeta": {
         "tradeCount": 48,

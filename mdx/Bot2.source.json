@@ -4,12 +4,12 @@
     "asset": "NEAR"
   },
   "signalBotSourceMeta": {
-    "optimizedPeriod": "2026-04-08 refresh",
+    "optimizedPeriod": "2026-05-06 MDX update",
     "exchange": "Bitget",
-    "timeframe": "150m",
-    "signalSetting": 4,
-    "baseline": "VWMA",
-    "baselineValue": 12,
+    "timeframe": "190m",
+    "signalSetting": 7,
+    "baseline": "TMA",
+    "baselineValue": 35,
     "slType": "ATR",
     "slValue": 3.5
   },
@@ -41,11 +41,11 @@
     },
     "balanced": {
       "strategy": {
-        "tpTargetsPercent": [4.22, 5.4, 6.73, 10.81, 16.2, 23.96],
-        "tpAllocationsPercent": [8, 42, 13, 13, 9, 15],
-        "stopLossPercent": 6,
+        "tpTargetsPercent": [1.5, 2.83, 4.32, 6.72, 9.41, 18.23],
+        "tpAllocationsPercent": [16, 18, 23, 20, 15, 8],
+        "stopLossPercent": 5,
         "slToBeTrigger": "TP1",
-        "leverage": 4
+        "leverage": 3
       },
       "performanceMeta": {
         "tradeCount": 47,

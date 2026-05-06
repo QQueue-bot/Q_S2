@@ -4,14 +4,14 @@
     "asset": "ZEC"
   },
   "signalBotSourceMeta": {
-    "optimizedPeriod": null,
-    "exchange": null,
-    "timeframe": null,
-    "signalSetting": null,
-    "baseline": null,
-    "baselineValue": null,
-    "slType": null,
-    "slValue": null
+    "optimizedPeriod": "2026-05-06 MDX update",
+    "exchange": "Bitget",
+    "timeframe": "165m",
+    "signalSetting": 5,
+    "baseline": "VWMA",
+    "baselineValue": 15,
+    "slType": "ATR",
+    "slValue": 3
   },
   "sourcePerformanceMeta": {
     "performance30d": null,
@@ -41,8 +41,8 @@
     },
     "balanced": {
       "strategy": {
-        "tpTargetsPercent": [3.73, 6.39, 9.9, 14.35, 26.04, 38.92],
-        "tpAllocationsPercent": [8, 42, 12, 12, 12, 14],
+        "tpTargetsPercent": [0.92, 2.09, 4.12, 8.27, 12.92, 26.45],
+        "tpAllocationsPercent": [12, 21, 20, 21, 18, 8],
         "stopLossPercent": 2,
         "slToBeTrigger": "TP1",
         "leverage": 7
