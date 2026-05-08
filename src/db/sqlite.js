@@ -700,6 +700,18 @@ function buildPersistence(db) {
     getRecentQualityMetricLog(limit = 20) {
       return db.prepare('SELECT * FROM quality_metric_log ORDER BY id DESC LIMIT ?').all(limit);
     },
+
+    findBeArmAfterLastEntry(botId, symbol) {
+      // Get the created_at of the most recent submitted ENTER order for this bot+symbol
+      const lastEntry = db.prepare(
+        "SELECT created_at FROM order_attempts WHERE bot_id=? AND symbol=? AND signal LIKE 'ENTER%' AND status='submitted' ORDER BY id DESC LIMIT 1"
+      ).get(botId, symbol);
+      if (!lastEntry) return null;
+      // Return the most recent BE_ARM trade_state_event recorded after that entry
+      return db.prepare(
+        "SELECT * FROM trade_state_events WHERE bot_id=? AND symbol=? AND action_key='BE_ARM' AND created_at > ? ORDER BY id DESC LIMIT 1"
+      ).get(botId, symbol, lastEntry.created_at) || null;
+    },
   };
 }
 

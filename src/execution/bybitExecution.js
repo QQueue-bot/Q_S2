@@ -272,14 +272,14 @@ function recordTradeAction(persistence, payload) {
 }
 
 function hasBreakEvenArmed(persistence, symbol, livePosition = null) {
-  // Use trade_state_events scoped by tradeId (symbol:side:createdTime) to avoid
-  // cross-trade bleed. Bybit may return a stale createdTime, but the side component
-  // ensures a Long's BE_ARM never matches a Short's query and vice versa.
-  if (livePosition && persistence.findTradeStateEventByKey) {
-    const tradeId = getTradeId(livePosition, symbol);
-    return hasTradeActionExecuted(persistence, tradeId, 'BE_ARM');
+  // Bybit returns a frozen stale createdTime for all positions on a sub-account,
+  // making tradeId non-unique across re-entries. Instead, scope the BE_ARM check
+  // to trade_state_events created AFTER our own last ENTER order_attempt.
+  const botId = livePosition && livePosition._botId ? livePosition._botId : null;
+  if (botId && persistence.findBeArmAfterLastEntry) {
+    return Boolean(persistence.findBeArmAfterLastEntry(botId, symbol));
   }
-  // Fallback for callers without livePosition (e.g. DCA guards pre-entry)
+  // Fallback for callers without botId (e.g. DCA guards pre-entry)
   const events = persistence.getBreakEvenEvents ? persistence.getBreakEvenEvents() : [];
   return events.some(event => event.symbol === symbol && event.event_type === 'armed');
 }
@@ -875,6 +875,8 @@ async function manageBreakEven(options = {}) {
   if (!livePosition) {
     return { ok: true, action: 'no_position', dbPath };
   }
+  // Attach botId so hasBreakEvenArmed can scope checks to our own entry timestamp
+  livePosition._botId = botContext.botId;
 
   const decision = shouldTriggerBreakEven(settings, livePosition, persistence);
   if (!decision || decision.type === 'none') {
