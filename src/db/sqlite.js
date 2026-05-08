@@ -712,6 +712,18 @@ function buildPersistence(db) {
         "SELECT * FROM trade_state_events WHERE bot_id=? AND symbol=? AND action_key='BE_ARM' AND created_at > ? ORDER BY id DESC LIMIT 1"
       ).get(botId, symbol, lastEntry.created_at) || null;
     },
+
+    hasTradeActionForCurrentTrade(botId, symbol, actionKey) {
+      // Anchor to the most recent submitted ENTER order_attempt for this bot+symbol.
+      // Avoids stale Bybit createdTime causing duplicate deduplication across re-entries.
+      const lastEntry = db.prepare(
+        "SELECT created_at FROM order_attempts WHERE bot_id=? AND symbol=? AND signal LIKE 'ENTER%' AND status='submitted' ORDER BY id DESC LIMIT 1"
+      ).get(botId, symbol);
+      if (!lastEntry) return false;
+      return Boolean(db.prepare(
+        "SELECT id FROM trade_state_events WHERE bot_id=? AND symbol=? AND action_key=? AND created_at > ? ORDER BY id DESC LIMIT 1"
+      ).get(botId, symbol, actionKey, lastEntry.created_at));
+    },
   };
 }
 

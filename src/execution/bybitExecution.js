@@ -887,7 +887,7 @@ async function manageBreakEven(options = {}) {
 
   if (decision.type === 'arm_break_even') {
     const actionKey = 'BE_ARM';
-    if (hasTradeActionExecuted(persistence, tradeId, actionKey)) {
+    if (persistence.hasTradeActionForCurrentTrade(botContext.botId, symbol, actionKey)) {
       return { ok: true, action: 'armed_skip_duplicate', dbPath, decision, tradeId };
     }
     persistence.recordBreakEvenEvent({
@@ -928,7 +928,7 @@ async function manageBreakEven(options = {}) {
   }
 
   const closeActionKey = 'BE_CLOSE';
-  if (hasTradeActionExecuted(persistence, tradeId, closeActionKey)) {
+  if (persistence.hasTradeActionForCurrentTrade(botContext.botId, symbol, closeActionKey)) {
     return { ok: true, action: 'break_even_close_skip_duplicate', dbPath, decision, tradeId };
   }
 
@@ -1001,6 +1001,7 @@ async function manageTpSl(options = {}) {
   if (!livePosition) {
     return { ok: true, action: 'no_position', dbPath };
   }
+  livePosition._botId = botContext.botId;
 
   const decision = evaluateTpSl(settings, livePosition);
   if (!decision || decision.type === 'none') {
@@ -1010,7 +1011,7 @@ async function manageTpSl(options = {}) {
   const tradeId = getTradeId(livePosition, symbol);
   const levelName = decision.type === 'take_profit' ? `TP_${decision.triggerPercent}_${decision.closePercent}` : 'STOP_LOSS';
   const actionKey = `${decision.type}:${levelName}`;
-  if (hasTradeActionExecuted(persistence, tradeId, actionKey)) {
+  if (persistence.hasTradeActionForCurrentTrade(botContext.botId, symbol, actionKey)) {
     recordTradeAction(persistence, {
       created_at: new Date().toISOString(),
       trade_id: tradeId,
