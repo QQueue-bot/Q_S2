@@ -1,75 +1,123 @@
 {
   "botMeta": {
-    "botName": "FLOKI",
-    "asset": "FLOKI"
+    "botName": "BERA",
+    "asset": "BERA"
   },
   "signalBotSourceMeta": {
-    "optimizedPeriod": "180 Days",
-    "exchange": "Bitget",
-    "timeframe": "175m",
+    "optimizedPeriod": "2026-05-08 activation",
+    "exchange": "Bybit",
+    "timeframe": "168m",
     "signalSetting": 5,
-    "baseline": "EMA",
-    "baselineValue": 18,
+    "baseline": "TMA",
+    "baselineValue": 25,
     "slType": "ATR",
-    "slValue": 3.5
+    "slValue": 2
   },
   "sourcePerformanceMeta": {
-    "performance30d": 13.04,
-    "performance90d": 59.24,
-    "performance180d": 108.73,
+    "performance30d": 9.08,
+    "performance90d": 11.1,
+    "performance180d": 18.49,
     "performance360d": null,
-    "winrate": 54.35,
-    "profitFactor": null
+    "winrate": 77.78,
+    "profitFactor": 1.467
   },
   "defaultProfile": "balanced",
   "profiles": {
     "safe": {
       "strategy": {
-        "tpTargetsPercent": [2.36, 4.69, 7.52, 11.06, 15.55, 23.78],
-        "tpAllocationsPercent": [26, 25, 15, 14, 11, 9],
-        "stopLossPercent": 6,
-        "slToBeTrigger": "TP2",
+        "tpTargetsPercent": [
+          1.39,
+          2.04,
+          3.52,
+          4.86,
+          11.48,
+          18.07
+        ],
+        "tpAllocationsPercent": [
+          27,
+          23,
+          18,
+          15,
+          10,
+          7
+        ],
+        "stopLossPercent": 4,
+        "slToBeTrigger": "TP1",
         "leverage": 1
       },
       "performanceMeta": {
-        "tradeCount": 46,
-        "winrate": 65.22,
-        "netProfit": 108.73,
-        "maxDrawdown": -11.32,
-        "avgTradeProfit": 2.36
+        "tradeCount": 45,
+        "winrate": 77.78,
+        "netProfit": 18.49,
+        "maxDrawdown": -11.47,
+        "avgTradeProfit": 0.41
       }
     },
     "balanced": {
       "strategy": {
-        "tpTargetsPercent": [3.01, 5.39, 7.28, 10.34, 15.83, 22.14],
-        "tpAllocationsPercent": [7, 38, 19, 18, 8, 10],
-        "stopLossPercent": 6,
+        "tpTargetsPercent": [
+          1.93,
+          2.44,
+          4.37,
+          8.61,
+          14.73,
+          19.63
+        ],
+        "tpAllocationsPercent": [
+          13,
+          18,
+          22,
+          22,
+          17,
+          8
+        ],
+        "stopLossPercent": 4,
         "slToBeTrigger": "TP1",
         "leverage": 3
       },
       "performanceMeta": {
-        "tradeCount": 46,
-        "winrate": 54.35,
-        "netProfit": 607.61,
-        "maxDrawdown": -27.14,
-        "avgTradeProfit": 13.21
+        "tradeCount": 45,
+        "winrate": 71.11,
+        "netProfit": 117.7,
+        "maxDrawdown": -28.35,
+        "avgTradeProfit": 2.62
       }
     },
     "aggressive": {
       "strategy": {
-        "tpTargetsPercent": [4.04, 6.46, 8.41, 12.39, 19.04, 30.51],
-        "tpAllocationsPercent": [8, 28, 11, 19, 23, 11],
-        "stopLossPercent": 6,
+        "tpTargetsPercent": [
+          2.22,
+          4.18,
+          6.41,
+          11.48,
+          15.94,
+          22.88
+        ],
+        "tpAllocationsPercent": [
+          8,
+          10,
+          21,
+          26,
+          25,
+          10
+        ],
+        "stopLossPercent": 4,
         "slToBeTrigger": "TP1",
         "leverage": 5
       },
       "performanceMeta": {
-        "tradeCount": 46,
-        "winrate": 69.57,
-        "netProfit": 3602.14,
-        "maxDrawdown": -49.81,
-        "avgTradeProfit": 78.31
+        "tradeCount": 45,
+        "winrate": 66.67,
+        "netProfit": 476.54,
+        "maxDrawdown": -47.35,
+        "avgTradeProfit": 10.59
       }
     }
+  },
+  "quality": {
+    "metric": "composite",
+    "threshold": 60,
+    "candleInterval": 60,
+    "notionalMultiplier": 2.0
   }
 }

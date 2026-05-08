@@ -66,8 +66,8 @@
     },
     {
       "botId": "Bot5",
-      "enabled": false,
-      "symbol": "WIFUSDT",
+      "enabled": true,
+      "symbol": "XLMUSDT",
       "settingsRef": "./settings.json",
       "credentialRef": {
         "apiKeyEnv": "S2_BOT5_API_KEY",
@@ -78,12 +78,12 @@
       "dcaPolicy": {
         "enabled": true
       },
-      "notes": "Prepared for later activation; disabled by default"
+      "notes": "XLM \u2014 activated 2026-05-08, replacing WIF"
     },
     {
       "botId": "Bot6",
-      "enabled": false,
-      "symbol": "IPUSDT",
+      "enabled": true,
+      "symbol": "JUPUSDT",
       "settingsRef": "./settings.json",
       "credentialRef": {
         "apiKeyEnv": "S2_BOT6_API_KEY",
@@ -94,12 +94,12 @@
       "dcaPolicy": {
         "enabled": true
       },
-      "notes": "Prepared for later activation; disabled by default"
+      "notes": "JUP \u2014 activated 2026-05-08, replacing IP"
     },
     {
       "botId": "Bot7",
-      "enabled": false,
-      "symbol": "1000FLOKIUSDT",
+      "enabled": true,
+      "symbol": "BERAUSDT",
       "settingsRef": "./settings.json",
       "credentialRef": {
         "apiKeyEnv": "S2_BOT7_API_KEY",
@@ -110,7 +110,7 @@
       "dcaPolicy": {
         "enabled": true
       },
-      "notes": "Prepared for later activation; disabled by default"
+      "notes": "BERA \u2014 activated 2026-05-08, replacing FLOKI"
     },
     {
       "botId": "Bot8",

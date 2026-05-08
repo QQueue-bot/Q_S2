@@ -393,7 +393,7 @@ function loadEquityData(dbPath) {
     const Database = require('better-sqlite3');
     const db = new Database(dbPath, { readonly: true });
 
-    const SYSTEM_START_MS = new Date('2026-04-24T19:09:00.000Z').getTime();
+    const SYSTEM_START_MS = new Date('2026-05-08T00:00:00.000Z').getTime();
     const LIVE_BASE  = Number(process.env.PORTFOLIO_BASELINE_USDT || 2799.94) / 8;
     const PAPER_BASE = Number(process.env.PAPER_BASELINE_USDT  || 2756.68) / 8;
     const P2_BASE    = Number(process.env.PAPER2_BASELINE_USDT || 2756.68) / 8;
@@ -404,12 +404,12 @@ function loadEquityData(dbPath) {
       FROM order_attempts
       WHERE signal LIKE 'ENTER%' AND signal NOT LIKE '%DCA_ADD%'
         AND signal NOT LIKE '%CLOSE_FIRST%'
-        AND created_at >= '2026-04-24T19:09:00.000Z'
+        AND created_at >= '2026-05-08T00:00:00.000Z'
       ORDER BY id ASC`).all();
 
     const dcaRows = db.prepare(`
       SELECT bot_id, symbol, notional_usd, created_at FROM order_attempts
-      WHERE signal LIKE '%DCA_ADD%' AND created_at >= '2026-04-24T19:09:00.000Z'
+      WHERE signal LIKE '%DCA_ADD%' AND created_at >= '2026-05-08T00:00:00.000Z'
       ORDER BY id ASC`).all();
 
     const exitRows = db.prepare(`
@@ -487,8 +487,8 @@ function loadEquityDataToday(dbPath) {
     const Database = require('better-sqlite3');
     const db = new Database(dbPath, { readonly: true });
 
-    const todayStartMs = new Date('2026-05-03T00:00:00.000Z').getTime();
-    const todayStartIso = '2026-05-03T00:00:00.000Z';
+    const todayStartMs = new Date('2026-05-08T00:00:00.000Z').getTime();
+    const todayStartIso = '2026-05-08T00:00:00.000Z';
 
     const LIVE_BASE  = Number(process.env.PORTFOLIO_BASELINE_USDT || 2799.94) / 8;
     const PAPER_BASE = Number(process.env.PAPER_BASELINE_USDT  || 2756.68) / 8;
@@ -499,12 +499,12 @@ function loadEquityDataToday(dbPath) {
       FROM order_attempts
       WHERE signal LIKE 'ENTER%' AND signal NOT LIKE '%DCA_ADD%'
         AND signal NOT LIKE '%CLOSE_FIRST%'
-        AND created_at >= '2026-04-24T19:09:00.000Z'
+        AND created_at >= '2026-05-08T00:00:00.000Z'
       ORDER BY id ASC`).all();
 
     const dcaRows = db.prepare(`
       SELECT bot_id, symbol, notional_usd, created_at FROM order_attempts
-      WHERE signal LIKE '%DCA_ADD%' AND created_at >= '2026-04-24T19:09:00.000Z'
+      WHERE signal LIKE '%DCA_ADD%' AND created_at >= '2026-05-08T00:00:00.000Z'
       ORDER BY id ASC`).all();
 
     const exitRows = db.prepare(`
