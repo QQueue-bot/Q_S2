@@ -42,12 +42,12 @@
     "balanced": {
       "strategy": {
         "tpTargetsPercent": [
-          3.37,
+          1.58,
           4.76,
-          12.4,
-          14.67,
-          22.4,
-          30.06
+          8.53,
+          13.09,
+          19.45,
+          30.43
         ],
         "tpAllocationsPercent": [
           13,
@@ -57,9 +57,9 @@
           17,
           8
         ],
-        "stopLossPercent": 6,
+        "stopLossPercent": 4,
         "slToBeTrigger": "TP1",
-        "leverage": 5
+        "leverage": 4
       },
       "performanceMeta": {
         "tradeCount": null,
