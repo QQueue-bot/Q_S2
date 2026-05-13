@@ -190,6 +190,60 @@ function initSchema(db) {
       chart_image_path TEXT,
       processed_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS s2_1_trades (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trade_id TEXT NOT NULL UNIQUE,
+      trade_number INTEGER NOT NULL,
+      bot_id TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      direction TEXT NOT NULL,
+      status TEXT NOT NULL,
+      dry_run INTEGER NOT NULL DEFAULT 0,
+      entry_price_snapshot REAL NOT NULL,
+      atr_pct_at_open REAL NOT NULL,
+      add_pct REAL NOT NULL,
+      intended_notional_usd REAL NOT NULL,
+      t1_intended_qty TEXT NOT NULL,
+      t1_fill_price REAL,
+      t1_fill_time TEXT,
+      t1_sl_order_id TEXT,
+      t1_slippage_pct REAL,
+      t2_intended_qty TEXT NOT NULL,
+      t2_trigger_price REAL NOT NULL,
+      t2_order_id TEXT,
+      t2_fired INTEGER NOT NULL DEFAULT 0,
+      t2_fill_price REAL,
+      t2_fill_time TEXT,
+      t2_sl_order_id TEXT,
+      t2_slippage_pct REAL,
+      tps_hit_json TEXT,
+      sl_hit TEXT,
+      close_reason TEXT,
+      close_time TEXT,
+      realised_pnl_pct REAL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS s2_1_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trade_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      occurred_at TEXT NOT NULL,
+      details_json TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS s2_1_signals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bot_id TEXT,
+      symbol TEXT,
+      direction TEXT,
+      received_at TEXT NOT NULL,
+      acted INTEGER,
+      reject_reason TEXT,
+      raw_body TEXT
+    );
   `);
 
   const ensureColumn = (tableName, columnName, columnSql) => {
@@ -480,6 +534,124 @@ function buildPersistence(db) {
     },
     getPendingTradeAssessments() {
       return db.prepare('SELECT * FROM trade_assessments WHERE post_trade_text IS NULL ORDER BY id DESC').all();
+    },
+
+    // ── S2.1 trades ──────────────────────────────────────────────────────────
+
+    insertS21Trade(row) {
+      const tradeNumber = (db.prepare(
+        'SELECT COUNT(*) AS cnt FROM s2_1_trades WHERE bot_id = ?'
+      ).get(row.bot_id).cnt) + 1;
+      const tradeId = `s21_${row.bot_id.toLowerCase()}_${String(tradeNumber).padStart(4, '0')}`;
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO s2_1_trades (
+          trade_id, trade_number, bot_id, symbol, direction, status, dry_run,
+          entry_price_snapshot, atr_pct_at_open, add_pct, intended_notional_usd,
+          t1_intended_qty, t2_intended_qty, t2_trigger_price,
+          created_at, updated_at
+        ) VALUES (
+          @trade_id, @trade_number, @bot_id, @symbol, @direction, @status, @dry_run,
+          @entry_price_snapshot, @atr_pct_at_open, @add_pct, @intended_notional_usd,
+          @t1_intended_qty, @t2_intended_qty, @t2_trigger_price,
+          @created_at, @updated_at
+        )
+      `).run({ ...row, trade_id: tradeId, trade_number: tradeNumber, created_at: now, updated_at: now });
+      return { tradeId, tradeNumber };
+    },
+
+    updateS21Trade(tradeId, fields) {
+      const sets = Object.keys(fields).map(k => `${k} = @${k}`).join(', ');
+      db.prepare(
+        `UPDATE s2_1_trades SET ${sets}, updated_at = @_updated_at WHERE trade_id = @_trade_id`
+      ).run({ ...fields, _trade_id: tradeId, _updated_at: new Date().toISOString() });
+    },
+
+    getS21Trade(tradeId) {
+      return db.prepare('SELECT * FROM s2_1_trades WHERE trade_id = ?').get(tradeId) || null;
+    },
+
+    getOpenS21TradesForSymbol(symbol) {
+      return db.prepare(
+        "SELECT * FROM s2_1_trades WHERE symbol = ? AND status != 'CLOSED'"
+      ).all(symbol);
+    },
+
+    getOpenS21Trades() {
+      return db.prepare(
+        "SELECT * FROM s2_1_trades WHERE status != 'CLOSED' ORDER BY id ASC"
+      ).all();
+    },
+
+    getS21Trades({ limit = 50, offset = 0 } = {}) {
+      return db.prepare(
+        'SELECT * FROM s2_1_trades ORDER BY id DESC LIMIT ? OFFSET ?'
+      ).all(limit, offset);
+    },
+
+    countS21Trades() {
+      return db.prepare('SELECT COUNT(*) AS cnt FROM s2_1_trades').get().cnt;
+    },
+
+    // ── S2.1 events ──────────────────────────────────────────────────────────
+
+    insertS21Event({ trade_id, event_type, occurred_at, details }) {
+      return db.prepare(`
+        INSERT INTO s2_1_events (trade_id, event_type, occurred_at, details_json)
+        VALUES (?, ?, ?, ?)
+      `).run(trade_id, event_type, occurred_at || new Date().toISOString(),
+        details ? JSON.stringify(details) : null);
+    },
+
+    getS21EventsForTrade(tradeId) {
+      return db.prepare(
+        'SELECT * FROM s2_1_events WHERE trade_id = ? ORDER BY id ASC'
+      ).all(tradeId);
+    },
+
+    // ── S2.1 signals ─────────────────────────────────────────────────────────
+
+    insertS21Signal({ bot_id, symbol, direction, received_at, acted, reject_reason, raw_body }) {
+      const actedVal = acted == null ? null : (acted ? 1 : 0);
+      const result = db.prepare(`
+        INSERT INTO s2_1_signals (bot_id, symbol, direction, received_at, acted, reject_reason, raw_body)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        bot_id || null,
+        symbol || null,
+        direction || null,
+        received_at || new Date().toISOString(),
+        actedVal,
+        reject_reason || null,
+        raw_body || null
+      );
+      return { signalId: result.lastInsertRowid };
+    },
+
+    updateS21Signal(signalId, { acted, reject_reason, bot_id, symbol, direction }) {
+      const fields = [];
+      const params = { _id: signalId };
+      if (acted !== undefined) { fields.push('acted = @acted'); params.acted = acted == null ? null : (acted ? 1 : 0); }
+      if (reject_reason !== undefined) { fields.push('reject_reason = @reject_reason'); params.reject_reason = reject_reason; }
+      if (bot_id !== undefined) { fields.push('bot_id = @bot_id'); params.bot_id = bot_id; }
+      if (symbol !== undefined) { fields.push('symbol = @symbol'); params.symbol = symbol; }
+      if (direction !== undefined) { fields.push('direction = @direction'); params.direction = direction; }
+      if (fields.length === 0) return;
+      db.prepare(`UPDATE s2_1_signals SET ${fields.join(', ')} WHERE id = @_id`).run(params);
+    },
+
+    deleteS21Signal(signalId) {
+      db.prepare('DELETE FROM s2_1_signals WHERE id = ?').run(signalId);
+    },
+
+    getS21Signals({ limit = 50, offset = 0 } = {}) {
+      return db.prepare(
+        'SELECT * FROM s2_1_signals ORDER BY id DESC LIMIT ? OFFSET ?'
+      ).all(limit, offset);
+    },
+
+    countS21Signals() {
+      return db.prepare('SELECT COUNT(*) AS cnt FROM s2_1_signals').get().cnt;
     },
   };
 }

@@ -1,0 +1,36 @@
+{
+  "_doc": "S2.1 bot registry. Bots here are owned by the S2.1 scaled-entry engine. NEVER also add these botIds to config/bots.json — that triggers a startup collision error in run-webhook.js, and would cause the legacy reconciler to attempt to drive S2.1 trades with the wrong credentials.",
+  "bots": [
+    {
+      "botId": "Bot9",
+      "engine": "s2_1",
+      "enabled": true,
+      "dryRun": true,
+      "symbol": "DEEPUSDT",
+      "displayName": "DEEP",
+      "notionalUsd": 500,
+      "credentialRef": {
+        "apiKeyEnv": "S21_DEEP_API_KEY",
+        "apiSecretEnv": "S21_DEEP_API_SECRET"
+      },
+      "strategy": {
+        "leverage": 5,
+        "tpTargetsPercent": [3.37, 4.76, 12.40, 14.67, 22.40, 30.06],
+        "tpAllocations": [0.13, 0.18, 0.22, 0.22, 0.17, 0.08],
+        "slPercent": 6.0,
+        "beAfterTpIdx": 0
+      },
+      "scaledEntry": {
+        "t1Fraction": 0.50,
+        "t2Fraction": 0.50,
+        "noiseBandMult": 0.5,
+        "t2SlMode": "breakeven",
+        "atrPeriod": 14,
+        "atrIntervalMin": 240
+      },
+      "paper": {
+        "t2FillDelayMs": 0
+      }
+    }
+  ]
+}
