@@ -46,37 +46,37 @@
       {
         "index": 1,
         "triggerPercent": 0.4,
-        "closePercent": 50.0,
+        "closePercent": 50,
         "enabled": true
       },
       {
         "index": 2,
         "triggerPercent": 0.8,
-        "closePercent": 50.0,
+        "closePercent": 50,
         "enabled": true
       },
       {
         "index": 3,
-        "triggerPercent": 0.0,
-        "closePercent": 0.0,
+        "triggerPercent": 0,
+        "closePercent": 0,
         "enabled": false
       },
       {
         "index": 4,
-        "triggerPercent": 0.0,
-        "closePercent": 0.0,
+        "triggerPercent": 0,
+        "closePercent": 0,
         "enabled": false
       },
       {
         "index": 5,
-        "triggerPercent": 0.0,
-        "closePercent": 0.0,
+        "triggerPercent": 0,
+        "closePercent": 0,
         "enabled": false
       },
       {
         "index": 6,
-        "triggerPercent": 0.0,
-        "closePercent": 0.0,
+        "triggerPercent": 0,
+        "closePercent": 0,
         "enabled": false
       }
     ],
@@ -84,9 +84,9 @@
   },
   "stopLoss": {
     "enabled": true,
-    "triggerPercent": 0.0,
-    "safetyMarginPercent": 1.0,
-    "notes": "triggerPercent is overridden per-bot by MDX profile at runtime. safetyMarginPercent is added on top of the MDX SL to set the Bybit native position-level stop \u2014 the last-resort safety net if software management fails."
+    "triggerPercent": 0,
+    "safetyMarginPercent": 1,
+    "notes": "triggerPercent is overridden per-bot by MDX profile at runtime. safetyMarginPercent is added on top of the MDX SL to set the Bybit native position-level stop — the last-resort safety net if software management fails."
   },
   "breakEven": {
     "enabled": true,
@@ -119,7 +119,7 @@
       "volumeSpike": 0.2,
       "htfTrend": 0.2,
       "winLossStreak": 0.1,
-      "supportResistance": 0.0
+      "supportResistance": 0
     },
     "notes": "Shadow-mode scoring only. No execution changes. supportResistance is stubbed at neutral weight 0 in v1."
   },
@@ -129,5 +129,13 @@
     "logEveryTick": true,
     "samplingIntervalMs": 0,
     "notes": "samplingIntervalMs can be raised later to reduce storage volume for longer-running deployments."
+  },
+  "reconciliation": {
+    "enabled": true,
+    "intervalSeconds": 45,
+    "perBotStaggerMs": 250,
+    "minQuietSecondsAfterEnter": 60,
+    "dryRun": false,
+    "notes": "Backstop reconciler. Validated by replay (4 historical BE-stops) and live synthetic Bot5 test."
   }
 }
