@@ -8,6 +8,7 @@ const { createRiskEngine } = require('../risk/evaluateSignal');
 const { executePaperTrade, executeSignalClose } = require('../execution/bybitExecution');
 const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite');
 const { computeS3Score } = require('../scoring/computeS3Score');
+const { tryDispatchS21 } = require('../s21/webhookHandler');
 
 function isHeartbeatSignal(input) {
   return typeof input === 'string' && input.trim().toUpperCase() === 'S2_HEARTBEAT';
@@ -115,6 +116,43 @@ function createWebhookServer(options = {}) {
             staleAfterMinutes: 360,
             executionQueued: false,
           });
+        }
+
+        // ── S2.1 dispatch (PR 4) ────────────────────────────────────────────
+        // Try the S2.1 engine BEFORE the legacy parse. tryDispatchS21 handles
+        // its own forensic logging into s2_1_signals — if it returns
+        // handled=true the legacy path is fully bypassed and the webhook
+        // response reflects S2.1's verdict. Errors inside this branch must
+        // NEVER cascade into legacy: any throw is swallowed, logged, and
+        // legacy fall-through proceeds as today.
+        try {
+          const s21Result = await tryDispatchS21({
+            rawSignal: signalInput,
+            persistence,
+            logger,
+            options: { bybitBaseUrl: process.env.BYBIT_BASE_URL },
+          });
+          if (s21Result.handled) {
+            persistence.recordWebhookEvent({
+              received_at: new Date().toISOString(),
+              request_path: requestUrl.pathname,
+              method: req.method,
+              auth_ok: 1,
+              parse_ok: s21Result.ok ? 1 : 1,  // S2.1 parsed it; ok=false is a rejection not a parse error
+              raw_body: signalInput,
+              error_message: s21Result.ok ? null : `S2.1 rejected: ${s21Result.reject_reason}`,
+            });
+            return json(res, 200, {
+              ok: s21Result.ok,
+              engine: 's2_1',
+              signalId: s21Result.signalId,
+              tradeId: s21Result.tradeId || null,
+              rejectReason: s21Result.reject_reason || null,
+            });
+          }
+        } catch (s21Err) {
+          // Defensive: a bug in the S2.1 branch must not kill legacy dispatch.
+          logger.warn('[s2.1] dispatch crashed — falling through to legacy', { error: s21Err.message, stack: s21Err.stack });
         }
 
         const bootContext = resolveBotContext('Bot1');
