@@ -3,8 +3,36 @@ const path = require('path');
 const { createWebhookServer } = require('../src/webhook/createServer');
 const { startTradeManagementLoop } = require('../src/runtime/startTradeManagementLoop');
 const { startReconciliationLoop } = require('../src/runtime/startReconciliationLoop');
+const { startS21FillWatcher } = require('../src/runtime/startS21FillWatcher');
+const { loadBotRegistry } = require('../src/config/botRegistry');
+const { getS21BotIds } = require('../src/s21/config');
 
 const settingsPath = path.join(__dirname, '..', 'config', 'settings.json');
+
+// ── Registry-collision guard (refinement #1) ──────────────────────────────
+// Bot IDs registered in s21-bots.json must not appear in the legacy
+// bots.json registry. If they do, the reconciler will try to drive S2.1
+// bots with wrong credentials, the in-position checks will fight each
+// other, and the dashboard will double-render. Fail fast at boot.
+{
+  const registryPath = path.join(__dirname, '..', 'config', 'bots.json');
+  const legacyIds = new Set(loadBotRegistry(registryPath).bots.map(b => b.botId));
+  let s21Ids;
+  try {
+    s21Ids = new Set(getS21BotIds());
+  } catch (err) {
+    console.warn('[boot] s21-bots.json not loadable — skipping collision check', err.message);
+    s21Ids = new Set();
+  }
+  const collisions = [...s21Ids].filter(id => legacyIds.has(id));
+  if (collisions.length > 0) {
+    throw new Error(
+      `Registry collision at boot: ${collisions.join(',')} present in BOTH ` +
+      `config/bots.json (legacy S2) and config/s21-bots.json (S2.1). ` +
+      `S2.1 bots must live only in s21-bots.json. Move or rename.`
+    );
+  }
+}
 
 const server = createWebhookServer({
   host: process.env.WEBHOOK_HOST || '127.0.0.1',
@@ -29,11 +57,18 @@ const reconciliationLoop = startReconciliationLoop({
   logger: console,
 });
 
+const s21FillWatcher = startS21FillWatcher({
+  envPath: '/home/ubuntu/.openclaw/.env',
+  dbPath: process.env.S2_DB_PATH || '/tmp/qs2_review/data/s2.sqlite',
+  logger: console,
+});
+
 server.start();
 
 function shutdown() {
   managementLoop.stop();
   reconciliationLoop.stop();
+  s21FillWatcher.stop();
   process.exit(0);
 }
 
