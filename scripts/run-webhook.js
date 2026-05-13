@@ -6,6 +6,7 @@ const { startReconciliationLoop } = require('../src/runtime/startReconciliationL
 const { startS21FillWatcher } = require('../src/runtime/startS21FillWatcher');
 const { loadBotRegistry } = require('../src/config/botRegistry');
 const { getS21BotIds } = require('../src/s21/config');
+const { createTelegramAlerts } = require('../src/s21/telegram');
 
 const settingsPath = path.join(__dirname, '..', 'config', 'settings.json');
 
@@ -34,12 +35,22 @@ const settingsPath = path.join(__dirname, '..', 'config', 'settings.json');
   }
 }
 
+// S2.1 Telegram alerts. Silent no-op until TELEGRAM_BOT_TOKEN and
+// TELEGRAM_S21_CHAT_ID are both set in the env.
+const s21Alerts = createTelegramAlerts({
+  botToken: process.env.TELEGRAM_BOT_TOKEN,
+  chatId: process.env.TELEGRAM_S21_CHAT_ID,
+  logger: console,
+});
+console.info('[s2.1-telegram] alerts ' + (s21Alerts.enabled ? 'ENABLED' : 'disabled (env vars unset)'));
+
 const server = createWebhookServer({
   host: process.env.WEBHOOK_HOST || '127.0.0.1',
   port: Number(process.env.WEBHOOK_PORT || 3001),
   path: process.env.WEBHOOK_PATH || '/webhook/tradingview',
   secret: process.env.WEBHOOK_SECRET || 'dev-secret',
   settingsPath,
+  s21Alerts,
   logger: console,
 });
 
@@ -60,6 +71,7 @@ const reconciliationLoop = startReconciliationLoop({
 const s21FillWatcher = startS21FillWatcher({
   envPath: '/home/ubuntu/.openclaw/.env',
   dbPath: process.env.S2_DB_PATH || '/tmp/qs2_review/data/s2.sqlite',
+  alerts: s21Alerts,
   logger: console,
 });
 

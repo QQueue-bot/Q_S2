@@ -16,6 +16,7 @@ function startS21FillWatcher(options = {}) {
     envPath = '/home/ubuntu/.openclaw/.env',
     dbPath = process.env.S2_DB_PATH || '/tmp/qs2_review/data/s2.sqlite',
     intervalMs = DEFAULT_INTERVAL_MS,
+    alerts = { enabled: false, send: async () => {} },
     logger = console,
   } = options;
 
@@ -49,6 +50,7 @@ function startS21FillWatcher(options = {}) {
     botConfigs: enabledBots,
     credentialsResolver,
     intervalMs,
+    alerts,
     logger,
   });
 }
