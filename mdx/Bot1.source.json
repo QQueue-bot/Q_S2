@@ -4,14 +4,14 @@
     "asset": "DEEP"
   },
   "signalBotSourceMeta": {
-    "optimizedPeriod": null,
-    "exchange": null,
-    "timeframe": null,
-    "signalSetting": null,
-    "baseline": null,
-    "baselineValue": null,
-    "slType": null,
-    "slValue": null
+    "optimizedPeriod": "2026-05-06 MDX update",
+    "exchange": "Bitget",
+    "timeframe": "240m",
+    "signalSetting": 3,
+    "baseline": "EMA",
+    "baselineValue": 30,
+    "slType": "ATR",
+    "slValue": 3.3
   },
   "sourcePerformanceMeta": {
     "performance30d": null,
@@ -41,11 +41,25 @@
     },
     "balanced": {
       "strategy": {
-        "tpTargetsPercent": [6.18, 12.87, 19.45, 24.1, 28.52, 34.18],
-        "tpAllocationsPercent": [7, 38, 19, 18, 8, 10],
+        "tpTargetsPercent": [
+          1.58,
+          4.76,
+          8.53,
+          13.09,
+          19.45,
+          30.43
+        ],
+        "tpAllocationsPercent": [
+          13,
+          18,
+          22,
+          22,
+          17,
+          8
+        ],
         "stopLossPercent": 4,
-        "slToBeTrigger": "TP2",
-        "leverage": 3
+        "slToBeTrigger": "TP1",
+        "leverage": 4
       },
       "performanceMeta": {
         "tradeCount": null,
@@ -71,5 +85,11 @@
         "avgTradeProfit": null
       }
     }
+  },
+  "quality": {
+    "metric": "composite",
+    "threshold": 60,
+    "candleInterval": 60,
+    "notionalMultiplier": 2.0
   }
 }

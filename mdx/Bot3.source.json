@@ -4,14 +4,14 @@
     "asset": "PAXG"
   },
   "signalBotSourceMeta": {
-    "optimizedPeriod": "2026-04-08 refresh",
+    "optimizedPeriod": "2026-05-06 MDX update",
     "exchange": "Bybit",
-    "timeframe": "130m",
-    "signalSetting": 4,
-    "baseline": "EMA",
-    "baselineValue": 34,
+    "timeframe": "185m",
+    "signalSetting": 3,
+    "baseline": "TMA",
+    "baselineValue": 35,
     "slType": "ATR",
-    "slValue": 6.2
+    "slValue": 5
   },
   "sourcePerformanceMeta": {
     "performance30d": 12.39,
@@ -25,8 +25,22 @@
   "profiles": {
     "safe": {
       "strategy": {
-        "tpTargetsPercent": [0.23, 0.68, 1.37, 2.93, 4.62, 7.47],
-        "tpAllocationsPercent": [26, 22, 17, 16, 10, 10],
+        "tpTargetsPercent": [
+          0.23,
+          0.68,
+          1.37,
+          2.93,
+          4.62,
+          7.47
+        ],
+        "tpAllocationsPercent": [
+          26,
+          22,
+          17,
+          16,
+          10,
+          10
+        ],
         "stopLossPercent": 3,
         "slToBeTrigger": "TP4",
         "leverage": 4
@@ -41,11 +55,25 @@
     },
     "balanced": {
       "strategy": {
-        "tpTargetsPercent": [0.4, 0.98, 1.73, 3.17, 5.11, 10.64],
-        "tpAllocationsPercent": [8, 21, 21, 21, 13, 16],
+        "tpTargetsPercent": [
+          0.45,
+          0.81,
+          1.65,
+          2.81,
+          3.56,
+          8.27
+        ],
+        "tpAllocationsPercent": [
+          13,
+          18,
+          22,
+          22,
+          16,
+          9
+        ],
         "stopLossPercent": 5,
-        "slToBeTrigger": "TP2",
-        "leverage": 8
+        "slToBeTrigger": "TP3",
+        "leverage": 5
       },
       "performanceMeta": {
         "tradeCount": 48,
@@ -57,8 +85,22 @@
     },
     "aggressive": {
       "strategy": {
-        "tpTargetsPercent": [0.47, 0.95, 1.84, 3.09, 4.89, 10.48],
-        "tpAllocationsPercent": [8, 8, 24, 25, 24, 11],
+        "tpTargetsPercent": [
+          0.47,
+          0.95,
+          1.84,
+          3.09,
+          4.89,
+          10.48
+        ],
+        "tpAllocationsPercent": [
+          8,
+          8,
+          24,
+          25,
+          24,
+          11
+        ],
         "stopLossPercent": 3,
         "slToBeTrigger": "TP3",
         "leverage": 12
@@ -71,5 +113,11 @@
         "avgTradeProfit": 63.86
       }
     }
+  },
+  "quality": {
+    "metric": "volume",
+    "threshold": 1.3,
+    "candleInterval": 60,
+    "notionalMultiplier": 2.0
   }
 }
