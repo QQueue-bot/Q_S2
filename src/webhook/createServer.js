@@ -21,6 +21,7 @@ function createWebhookServer(options = {}) {
     path: webhookPath = '/webhook/tradingview',
     secret = process.env.WEBHOOK_SECRET || '',
     settingsPath = options.settingsPath,
+    s21Alerts = { enabled: false, send: async () => {} },
     logger = console,
   } = options;
 
@@ -130,6 +131,7 @@ function createWebhookServer(options = {}) {
             rawSignal: signalInput,
             persistence,
             logger,
+            alerts: s21Alerts,
             options: { bybitBaseUrl: process.env.BYBIT_BASE_URL },
           });
           if (s21Result.handled) {
