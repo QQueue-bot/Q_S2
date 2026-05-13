@@ -10,7 +10,12 @@
     "run:dashboard": "node scripts/run-dashboard.js",
     "test:persistence": "node scripts/test-persistence.js",
     "test:price": "node scripts/test-price-monitor.js",
-    "test:execution": "node scripts/test-execution.js"
+    "test:execution": "node scripts/test-execution.js",
+    "test:closed-pnl-client": "node scripts/test-closed-pnl-client.js",
+    "test:exit-event-dedup": "node scripts/test-exit-event-dedup.js",
+    "test:reconciler-replay": "node scripts/test-reconciler-replay.js",
+    "test:reconciler-bot5-synthetic": "node scripts/test-reconciler-bot5-synthetic.js",
+    "reconcile:once": "node scripts/reconcile-once.js"
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1",
