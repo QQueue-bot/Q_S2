@@ -23,7 +23,8 @@ const { reconcileAll } = require('../src/reconciliation/positionReconciler');
 
 const BOT_ID = 'Bot5';
 const SYMBOL = 'XLMUSDT';
-const TARGET_NOTIONAL_USD = 5.0;
+const TARGET_NOTIONAL_USD = 6.0;
+const MIN_NOTIONAL_FLOOR_USD = 5.5;
 const MIN_WALLET_USD = 50.0;
 const HARD_TIMEOUT_MS = 30000;
 
@@ -194,8 +195,10 @@ async function getInstrument(creds) {
   console.log(`  instrument: qtyStep=${qtyStep} minQty=${minQty}`);
   const price = await getTickerPrice(creds);
   console.log(`  price:    ${price}`);
-  let plannedQty = quantizeQty(TARGET_NOTIONAL_USD / price, qtyStep || 1);
+  const step = Number(qtyStep) || 1;
+  let plannedQty = quantizeQty(TARGET_NOTIONAL_USD / price, step);
   if (plannedQty < Number(minQty || 1)) plannedQty = Number(minQty || 1);
+  while (plannedQty * price < MIN_NOTIONAL_FLOOR_USD) plannedQty += step;
   console.log(`  qty:      ${plannedQty} (notional ~$${(plannedQty * price).toFixed(2)})`);
 
   if (!args.confirm) {
@@ -203,6 +206,28 @@ async function getInstrument(creds) {
     console.log('Dry run complete. Re-run with --confirm to execute the live test.');
     process.exit(0);
   }
+
+  console.log('');
+  console.log('Inserting synthetic order_attempts row before placing order...');
+  const syntheticOrderAttempt = {
+    created_at: new Date().toISOString(),
+    signal: 'ENTER_LONG',
+    bot_id: BOT_ID,
+    symbol: SYMBOL,
+    side: 'Buy',
+    order_type: 'Market',
+    qty: String(plannedQty),
+    notional_usd: plannedQty * price,
+    status: 'submitted',
+    response_json: JSON.stringify({ source: `synthetic_reconciler_test_${Date.now()}` }),
+  };
+  const db = createDatabase(dbPath);
+  initSchema(db);
+  const insOA = db.prepare(`
+    INSERT INTO order_attempts (created_at, signal, bot_id, symbol, side, order_type, qty, notional_usd, status, response_json)
+    VALUES (@created_at, @signal, @bot_id, @symbol, @side, @order_type, @qty, @notional_usd, @status, @response_json)
+  `).run(syntheticOrderAttempt);
+  console.log(`  synthetic order_attempts inserted: id=${insOA.lastInsertRowid} at ${syntheticOrderAttempt.created_at}`);
 
   console.log('');
   console.log('Executing live test...');
@@ -241,26 +266,6 @@ async function getInstrument(creds) {
     }
     process.exit(4);
   }
-
-  const syntheticOrderAttempt = {
-    created_at: new Date().toISOString(),
-    signal: 'ENTER_LONG',
-    bot_id: BOT_ID,
-    symbol: SYMBOL,
-    side: 'Buy',
-    order_type: 'Market',
-    qty: String(plannedQty),
-    notional_usd: plannedQty * price,
-    status: 'submitted',
-    response_json: JSON.stringify({ source: `synthetic_reconciler_test_${Date.now()}` }),
-  };
-  const db = createDatabase(dbPath);
-  initSchema(db);
-  const insOA = db.prepare(`
-    INSERT INTO order_attempts (created_at, signal, bot_id, symbol, side, order_type, qty, notional_usd, status, response_json)
-    VALUES (@created_at, @signal, @bot_id, @symbol, @side, @order_type, @qty, @notional_usd, @status, @response_json)
-  `).run(syntheticOrderAttempt);
-  console.log(`  synthetic order_attempts inserted: id=${insOA.lastInsertRowid}`);
 
   console.log('');
   console.log('Running reconciler...');

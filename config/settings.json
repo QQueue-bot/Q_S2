@@ -129,5 +129,13 @@
     "logEveryTick": true,
     "samplingIntervalMs": 0,
     "notes": "samplingIntervalMs can be raised later to reduce storage volume for longer-running deployments."
+  },
+  "reconciliation": {
+    "enabled": true,
+    "intervalSeconds": 45,
+    "perBotStaggerMs": 250,
+    "minQuietSecondsAfterEnter": 60,
+    "dryRun": false,
+    "notes": "Backstop that reconciles S2 exit_events ledger against Bybit closed-pnl. Catches native SL/TP/BE hits the software TP/SL manager misses. Validated by replay test (4 historical BE-stops) and live synthetic test (Bot5 trade)."
   }
 }

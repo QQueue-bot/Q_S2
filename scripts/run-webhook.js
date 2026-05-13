@@ -2,6 +2,7 @@
 const path = require('path');
 const { createWebhookServer } = require('../src/webhook/createServer');
 const { startTradeManagementLoop } = require('../src/runtime/startTradeManagementLoop');
+const { startReconciliationLoop } = require('../src/runtime/startReconciliationLoop');
 
 const settingsPath = path.join(__dirname, '..', 'config', 'settings.json');
 
@@ -21,14 +22,20 @@ const managementLoop = startTradeManagementLoop({
   logger: console,
 });
 
+const reconciliationLoop = startReconciliationLoop({
+  settingsPath,
+  envPath: '/home/ubuntu/.openclaw/.env',
+  dbPath: process.env.S2_DB_PATH || '/tmp/qs2_review/data/s2.sqlite',
+  logger: console,
+});
+
 server.start();
 
-process.on('SIGINT', () => {
+function shutdown() {
   managementLoop.stop();
+  reconciliationLoop.stop();
   process.exit(0);
-});
+}
 
-process.on('SIGTERM', () => {
-  managementLoop.stop();
-  process.exit(0);
-});
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

@@ -34,15 +34,15 @@ function checkType(value, expected, objPath, issues) {
 function validateSettingsObject(settings) {
   const issues = [];
 
-  const topAllowed = ['configVersion', 'environment', 'trading', 'positionSizing', 'riskControls', 'takeProfit', 'stopLoss', 'breakEven', 'dca', 'storage', 'logging', 'priceMonitoring', 's3'];
+  const topAllowed = ['configVersion', 'environment', 'trading', 'positionSizing', 'riskControls', 'takeProfit', 'stopLoss', 'breakEven', 'dca', 'storage', 'logging', 'priceMonitoring', 's3', 'reconciliation'];
+  const topRequired = ['configVersion', 'environment', 'trading', 'positionSizing', 'riskControls', 'takeProfit', 'stopLoss', 'breakEven', 'dca', 'storage', 'logging', 'priceMonitoring', 's3'];
   checkType(settings, 'object', 'settings', issues);
   if (!isPlainObject(settings)) {
     return finalize(settings, issues);
   }
   checkUnknownKeys(settings, topAllowed, 'settings', issues);
 
-  const requiredTop = topAllowed;
-  for (const key of requiredTop) {
+  for (const key of topRequired) {
     if (!(key in settings)) addIssue(issues, 'error', `settings.${key}`, 'Missing required key');
   }
 
@@ -188,6 +188,19 @@ function validateSettingsObject(settings) {
       }
     } else {
       addIssue(issues, 'error', 'settings.s3.weights', 'Must be an object');
+    }
+  }
+
+  if ('reconciliation' in settings) {
+    const rec = settings.reconciliation;
+    checkType(rec, 'object', 'settings.reconciliation', issues);
+    if (isPlainObject(rec)) {
+      checkUnknownKeys(rec, ['enabled', 'intervalSeconds', 'perBotStaggerMs', 'minQuietSecondsAfterEnter', 'dryRun', 'notes'], 'settings.reconciliation', issues);
+      if (typeof rec.enabled !== 'boolean') addIssue(issues, 'error', 'settings.reconciliation.enabled', 'Must be boolean');
+      if (typeof rec.intervalSeconds !== 'number' || rec.intervalSeconds < 10) addIssue(issues, 'error', 'settings.reconciliation.intervalSeconds', 'Must be >= 10');
+      if (typeof rec.perBotStaggerMs !== 'number' || rec.perBotStaggerMs < 0) addIssue(issues, 'error', 'settings.reconciliation.perBotStaggerMs', 'Must be >= 0');
+      if (typeof rec.minQuietSecondsAfterEnter !== 'number' || rec.minQuietSecondsAfterEnter < 0) addIssue(issues, 'error', 'settings.reconciliation.minQuietSecondsAfterEnter', 'Must be >= 0');
+      if ('dryRun' in rec && typeof rec.dryRun !== 'boolean') addIssue(issues, 'error', 'settings.reconciliation.dryRun', 'Must be boolean if present');
     }
   }
 
