@@ -68,10 +68,15 @@ const BASE_CSS = `
 `;
 
 function navBar(active) {
-  const tabs = ['s2', 's4', 's6'];
+  const tabs = [
+    { key: 's2',   href: '/s2',                label: 'S2'   },
+    { key: 's2-1', href: '/s2-1/trade-log',    label: 'S2.1' },
+    { key: 's4',   href: '/s4',                label: 'S4'   },
+    { key: 's6',   href: '/s6',                label: 'S6'   },
+  ];
   return `<nav class="q-nav">
     <span class="q-nav-logo">Q Portal</span>
-    ${tabs.map(t => `<a href="/${t}" class="q-nav-tab${active === t ? ' active' : ''}">${t.toUpperCase()}</a>`).join('')}
+    ${tabs.map(t => `<a href="${t.href}" class="q-nav-tab${active === t.key ? ' active' : ''}">${t.label}</a>`).join('')}
   </nav>`;
 }
 
@@ -1458,6 +1463,71 @@ async function handleRequest(req, res, options) {
     }
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     if (method !== 'HEAD') res.end(JSON.stringify(data)); else res.end();
+    return;
+  }
+
+  // ── S2.1 routes ─────────────────────────────────────────────────────────
+  if (path === '/s2-1') {
+    res.writeHead(302, { Location: '/s2-1/trade-log' });
+    res.end();
+    return;
+  }
+  if (path === '/s2-1/trade-log') {
+    try {
+      const dbPath = (options.mobileBotStatusOptions || {}).dbPath || '/tmp/qs2_review/data/s2.sqlite';
+      const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite');
+      const { prepareTradeLogData, renderTradeLogBody, TRADE_LOG_CSS } = require('../s21/tradeLogPage');
+      const db = createDatabase(dbPath);
+      initSchema(db);
+      const persistence = buildPersistence(db);
+      const data = prepareTradeLogData(persistence);
+      const body = renderTradeLogBody(data);
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      if (method !== 'HEAD') res.end(pageShell('s2-1', 'S2.1 Trade Log', TRADE_LOG_CSS, body));
+      else res.end();
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end(`Failed to render S2.1 trade log: ${err.message}`);
+    }
+    return;
+  }
+  if (path === '/api/s2-1/trade-log') {
+    try {
+      const dbPath = (options.mobileBotStatusOptions || {}).dbPath || '/tmp/qs2_review/data/s2.sqlite';
+      const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite');
+      const { prepareTradeLogData } = require('../s21/tradeLogPage');
+      const db = createDatabase(dbPath);
+      initSchema(db);
+      const persistence = buildPersistence(db);
+      const data = prepareTradeLogData(persistence);
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      if (method !== 'HEAD') res.end(JSON.stringify(data));
+      else res.end();
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+  if (path === '/api/s2-1/export.csv') {
+    try {
+      const dbPath = (options.mobileBotStatusOptions || {}).dbPath || '/tmp/qs2_review/data/s2.sqlite';
+      const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite');
+      const { buildCsvExport } = require('../s21/tradeLogPage');
+      const db = createDatabase(dbPath);
+      initSchema(db);
+      const persistence = buildPersistence(db);
+      const csv = buildCsvExport(persistence);
+      res.writeHead(200, {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="s2-1-trade-log-${new Date().toISOString().slice(0, 10)}.csv"`,
+      });
+      if (method !== 'HEAD') res.end(csv);
+      else res.end();
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end(`CSV export failed: ${err.message}`);
+    }
     return;
   }
 
