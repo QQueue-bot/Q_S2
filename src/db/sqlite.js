@@ -540,6 +540,9 @@ function buildPersistence(db) {
     getWebhookEvents() {
       return db.prepare('SELECT * FROM raw_webhook_events ORDER BY id ASC').all();
     },
+    getRecentWebhookEvents(limit = 100) {
+      return db.prepare('SELECT * FROM raw_webhook_events ORDER BY id DESC LIMIT ?').all(limit);
+    },
     getNormalizedSignals() {
       return db.prepare('SELECT * FROM normalized_signals ORDER BY id ASC').all();
     },

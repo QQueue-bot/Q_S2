@@ -69,10 +69,11 @@ const BASE_CSS = `
 
 function navBar(active) {
   const tabs = [
-    { key: 's2',   href: '/s2',                label: 'S2'   },
-    { key: 's2-1', href: '/s2-1/trade-log',    label: 'S2.1' },
-    { key: 's4',   href: '/s4',                label: 'S4'   },
-    { key: 's6',   href: '/s6',                label: 'S6'   },
+    { key: 's2',         href: '/s2',                label: 'S2'           },
+    { key: 's2-1',       href: '/s2-1/trade-log',    label: 'S2.1'         },
+    { key: 's2-all',     href: '/s2-all-signals',    label: 'S2 all'       },
+    { key: 's4',         href: '/s4',                label: 'S4'           },
+    { key: 's6',         href: '/s6',                label: 'S6'           },
   ];
   return `<nav class="q-nav">
     <span class="q-nav-logo">Q Portal</span>
@@ -1509,6 +1510,44 @@ async function handleRequest(req, res, options) {
     }
     return;
   }
+  if (path === '/s2-all-signals') {
+    try {
+      const dbPath = (options.mobileBotStatusOptions || {}).dbPath || '/tmp/qs2_review/data/s2.sqlite';
+      const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite');
+      const { prepareAllSignalsData, renderAllSignalsBody, ALL_SIGNALS_CSS } = require('../s21/allSignalsPage');
+      const db = createDatabase(dbPath);
+      initSchema(db);
+      const persistence = buildPersistence(db);
+      const data = prepareAllSignalsData(persistence, { limit: 100 });
+      const body = renderAllSignalsBody(data);
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      if (method !== 'HEAD') res.end(pageShell('s2-all', 'S2 all Signal Log', ALL_SIGNALS_CSS, body));
+      else res.end();
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end(`Failed to render S2 all-signals page: ${err.message}`);
+    }
+    return;
+  }
+  if (path === '/api/s2-all-signals') {
+    try {
+      const dbPath = (options.mobileBotStatusOptions || {}).dbPath || '/tmp/qs2_review/data/s2.sqlite';
+      const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite');
+      const { prepareAllSignalsData } = require('../s21/allSignalsPage');
+      const db = createDatabase(dbPath);
+      initSchema(db);
+      const persistence = buildPersistence(db);
+      const data = prepareAllSignalsData(persistence, { limit: 100 });
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      if (method !== 'HEAD') res.end(JSON.stringify(data));
+      else res.end();
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
   if (path === '/api/s2-1/export.csv') {
     try {
       const dbPath = (options.mobileBotStatusOptions || {}).dbPath || '/tmp/qs2_review/data/s2.sqlite';
