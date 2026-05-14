@@ -13,6 +13,7 @@
 // (proves the webhook path is alive). Render them muted.
 
 const S21_BOT_IDS = new Set();  // populated lazily from s21-bots.json
+const BOT_SYMBOLS = new Map();  // botId → symbol, lazily populated from both registries
 
 function _getS21BotIds() {
   if (S21_BOT_IDS.size > 0) return S21_BOT_IDS;
@@ -23,6 +24,30 @@ function _getS21BotIds() {
     // s21-bots.json missing → empty set, nothing classifies as S2.1
   }
   return S21_BOT_IDS;
+}
+
+// Builds the bot→symbol map from BOTH registries. S2.1 wins on collision
+// (defence in depth — though the boot-time collision check should already
+// have prevented dual registration).
+function _getBotSymbols() {
+  if (BOT_SYMBOLS.size > 0) return BOT_SYMBOLS;
+  const path = require('path');
+  // Legacy S2 (config/bots.json)
+  try {
+    const legacy = require(path.join(__dirname, '..', '..', 'config', 'bots.json'));
+    for (const bot of legacy.bots || []) {
+      if (bot.botId && bot.symbol) BOT_SYMBOLS.set(bot.botId, bot.symbol);
+    }
+  } catch {}
+  // S2.1 (config/s21-bots.json) — overrides legacy on collision
+  try {
+    const { loadS21Config } = require('./config');
+    const s21 = loadS21Config();
+    for (const bot of s21.bots || []) {
+      if (bot.botId && bot.symbol) BOT_SYMBOLS.set(bot.botId, bot.symbol);
+    }
+  } catch {}
+  return BOT_SYMBOLS;
 }
 
 // Permissive signal parser. Matches legacy and S2.1 shapes both.
@@ -122,12 +147,15 @@ function prepareAllSignalsData(persistence, options = {}) {
       statusDetail = evt.error_message;
     }
 
+    const symbol = parsed ? (_getBotSymbols().get(parsed.botId) || null) : null;
+
     return {
       id: evt.id,
       received_at: evt.received_at,
       raw_body: evt.raw_body,
       source,
       bot_id: parsed ? parsed.botId : null,
+      symbol,
       action: parsed ? parsed.action : null,
       direction: parsed ? parsed.direction : null,
       status,
@@ -181,6 +209,7 @@ function _renderRow(row) {
       <div class="sas-time">${_formatZurich(row.received_at)}</div>
       <div class="sas-source"><span class="sas-chip ${sourceChip}">${row.source.replace('_', ' ')}</span></div>
       <div class="sas-bot">${_escape(row.bot_id || '—')} ${row.action ? `<span class="sas-action">${row.action}</span>` : ''}${direction}</div>
+      <div class="sas-token">${_escape(row.symbol || '—')}</div>
       <div class="sas-status"><span class="sas-chip ${statusChip}">${row.status}</span>${detail}</div>
       <div class="sas-raw">${_escape(row.raw_body || '—')}</div>
     </div>`;
@@ -214,7 +243,7 @@ function renderAllSignalsBody(data) {
       </div>
 
       <div class="sas-list-head">
-        <div>TIME (CH)</div><div>SOURCE</div><div>BOT</div><div>STATUS</div><div>RAW</div>
+        <div>TIME (CH)</div><div>SOURCE</div><div>BOT</div><div>TOKEN</div><div>STATUS</div><div>RAW</div>
       </div>
       <div class="sas-list">${rows}</div>
 
@@ -246,7 +275,7 @@ const ALL_SIGNALS_CSS = `
 
   .sas-list-head, .sas-row {
     display: grid;
-    grid-template-columns: 130px 100px 140px 1fr 1.4fr;
+    grid-template-columns: 130px 95px 130px 110px 1fr 1.2fr;
     gap: 8px;
     padding: 8px 10px;
     align-items: center;
@@ -267,6 +296,7 @@ const ALL_SIGNALS_CSS = `
   .sas-bot { color: #e2e8f0; font-weight: 600; }
   .sas-action { color: #94a3b8; font-weight: 400; margin-left: 4px; font-size: 11px; }
   .sas-dir { color: #93c5fd; font-weight: 400; margin-left: 4px; font-size: 11px; }
+  .sas-token { color: #c4b5fd; font-family: 'SF Mono', Menlo, monospace; font-size: 11px; font-weight: 600; }
   .sas-raw { color: #475569; font-family: 'SF Mono', Menlo, monospace; font-size: 10px; word-break: break-all; }
   .sas-detail { color: #fca5a5; font-size: 10px; margin-left: 4px; }
 
