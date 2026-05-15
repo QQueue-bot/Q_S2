@@ -340,6 +340,21 @@ function initSchema(db) {
       reject_reason TEXT,
       raw_body TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS filter_decisions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL,
+      signal_time_utc TEXT NOT NULL,
+      bot_id TEXT NOT NULL,
+      symbol TEXT,
+      signal TEXT NOT NULL,
+      side TEXT,
+      mode TEXT NOT NULL DEFAULT 'live_filter',
+      filter_action TEXT NOT NULL,
+      filter_state_snapshot TEXT,
+      signal_price REAL,
+      verbose INTEGER NOT NULL DEFAULT 0
+    );
   `);
 
   const ensureColumn = (tableName, columnName, columnSql) => {
@@ -351,6 +366,12 @@ function initSchema(db) {
 
   ensureColumn('exit_events', 'bot_id', "TEXT NOT NULL DEFAULT 'Bot1'");
   ensureColumn('break_even_events', 'bot_id', "TEXT NOT NULL DEFAULT 'Bot1'");
+
+  // feature/filter-twin: vanilla paper twin trade accounting + mode tagging.
+  ensureColumn('paper_positions', 'mode', "TEXT NOT NULL DEFAULT 'paper_vanilla'");
+  ensureColumn('paper_positions', 'paper_fees_usd', 'REAL');
+  ensureColumn('paper_positions', 'paper_funding_usd', 'REAL');
+  ensureColumn('paper_positions', 'filter_state_snapshot', 'TEXT');
 }
 
 function buildPersistence(db) {
@@ -587,6 +608,31 @@ function buildPersistence(db) {
         latency_ms: result.latencyMs,
         data_available: result.dataAvailable ? 1 : 0,
       });
+    },
+    recordFilterDecision(d) {
+      return db.prepare(`
+        INSERT INTO filter_decisions
+          (created_at, signal_time_utc, bot_id, symbol, signal, side, mode,
+           filter_action, filter_state_snapshot, signal_price, verbose)
+        VALUES
+          (@created_at, @signal_time_utc, @bot_id, @symbol, @signal, @side, @mode,
+           @filter_action, @filter_state_snapshot, @signal_price, @verbose)
+      `).run({
+        created_at: new Date().toISOString(),
+        signal_time_utc: d.signalTimeUtc,
+        bot_id: d.botId,
+        symbol: d.symbol || null,
+        signal: d.signal,
+        side: d.side || null,
+        mode: 'live_filter',
+        filter_action: d.filterAction,
+        filter_state_snapshot: d.stateSnapshot ? JSON.stringify(d.stateSnapshot) : null,
+        signal_price: d.signalPrice != null ? d.signalPrice : null,
+        verbose: d.verbose ? 1 : 0,
+      });
+    },
+    getFilterDecisions() {
+      return db.prepare('SELECT * FROM filter_decisions ORDER BY id DESC').all();
     },
     getS3Scores() {
       return db.prepare('SELECT * FROM s3_scores ORDER BY id DESC').all();
