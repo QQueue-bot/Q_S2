@@ -707,6 +707,41 @@ function buildPersistence(db) {
           exit_pnl_pct = ?, exit_pnl_usd = ?, closed_at = ? WHERE id = ?
       `).run(exit_price, exit_reason, exit_pnl_pct, exit_pnl_usd, closed_at, id);
     },
+    // feature/filter-twin: vanilla paper twin — additive helpers, do not
+    // touch the P1/P2/QPool insert/close helpers above.
+    insertVanillaPaperPosition(row) {
+      return db.prepare(`
+        INSERT INTO paper_positions (
+          created_at, paper_bot_id, live_bot_id, symbol, side, signal,
+          entry_price, qty, notional_usd, mode, filter_state_snapshot
+        ) VALUES (
+          @created_at, @paper_bot_id, @live_bot_id, @symbol, @side, @signal,
+          @entry_price, @qty, @notional_usd, 'paper_vanilla', NULL
+        )
+      `).run(row);
+    },
+    closeVanillaPaperPosition({ id, exit_price, exit_reason, exit_pnl_pct,
+                                exit_pnl_usd, closed_at, paper_fees_usd, paper_funding_usd }) {
+      return db.prepare(`
+        UPDATE paper_positions SET status = 'closed', exit_price = ?, exit_reason = ?,
+          exit_pnl_pct = ?, exit_pnl_usd = ?, closed_at = ?,
+          paper_fees_usd = ?, paper_funding_usd = ? WHERE id = ?
+      `).run(exit_price, exit_reason, exit_pnl_pct, exit_pnl_usd, closed_at,
+             paper_fees_usd, paper_funding_usd, id);
+    },
+    // NOTE: the paper_positions.mode column (added in Phase 1) has DEFAULT
+    // 'paper_vanilla', and insertPaperPosition (P1/P2/QPool) does not set it,
+    // so EVERY pre-existing P1/P2/QPool row also reports mode='paper_vanilla'.
+    // The reliable, retroactively-correct discriminator for the vanilla twin
+    // is therefore the paper_bot_id prefix ('vanilla_<botId>'), not mode.
+    getOpenVanillaPaperPosition(liveBotId) {
+      return db.prepare(
+        "SELECT * FROM paper_positions WHERE live_bot_id = ? AND substr(paper_bot_id,1,8) = 'vanilla_' AND status = 'open' ORDER BY id DESC LIMIT 1"
+      ).get(liveBotId) || null;
+    },
+    getVanillaPaperPositions() {
+      return db.prepare("SELECT * FROM paper_positions WHERE substr(paper_bot_id,1,8) = 'vanilla_' ORDER BY id ASC").all();
+    },
     updatePaperPositionRemainingQty(id, remaining_qty_pct) {
       return db.prepare('UPDATE paper_positions SET remaining_qty_pct = ? WHERE id = ?').run(remaining_qty_pct, id);
     },
