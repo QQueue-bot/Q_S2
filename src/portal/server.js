@@ -72,6 +72,7 @@ function navBar(active) {
     { key: 's2',         href: '/s2',                label: 'S2'           },
     { key: 's2-1',       href: '/s2-1/trade-log',    label: 'S2.1'         },
     { key: 's2-all',     href: '/s2-all-signals',    label: 'S2 all'       },
+    { key: 's2-twin',    href: '/s2-twin',           label: 'Twin'         },
     { key: 's4',         href: '/s4',                label: 'S4'           },
     { key: 's6',         href: '/s6',                label: 'S6'           },
   ];
@@ -822,7 +823,14 @@ function renderBotCard(bot) {
   </div>`;
 }
 
-function renderS2Page(status, paperPortfolio, cpData) {
+function renderS2Page(status, paperPortfolio, cpData, dbPath) {
+  const { renderFilterTwinSection, FILTER_TWIN_CSS } = require('./filterTwinPanel');
+  let filterTwinSection = '';
+  try {
+    filterTwinSection = dbPath ? renderFilterTwinSection(dbPath) : '';
+  } catch (ftErr) {
+    filterTwinSection = `<div class="ftw-block"><div class="ftw-head">Filter Twin</div><div class="ftw-empty">render failed: ${String(ftErr.message)}</div></div>`;
+  }
   const totals = status.totals || {};
   const bots = Array.isArray(status.bots) ? status.bots : [];
   const heartbeat = status.heartbeat || {};
@@ -918,6 +926,7 @@ function renderS2Page(status, paperPortfolio, cpData) {
     .ta-body{font-size:12px;color:#94a3b8;line-height:1.5;white-space:pre-wrap;}
     .ta-meta{font-size:11px;color:#475569;}
     .ta-divider{border:none;border-top:1px solid #1e293b;margin:4px 0;}
+    ${FILTER_TWIN_CSS}
   `;
 
   const body = `<div class="wrap">
@@ -1113,6 +1122,8 @@ function renderS2Page(status, paperPortfolio, cpData) {
       }
     })();
     </script>
+
+    ${filterTwinSection}
 
     <div class="generated">Updated ${status.generatedAt || 'n/a'}</div>
     <div class="freshness">Auto-refresh 15s · heartbeat stale after ${heartbeat.heartbeatStaleThresholdMinutes || 360}m</div>
@@ -1510,6 +1521,45 @@ async function handleRequest(req, res, options) {
     }
     return;
   }
+  if (path === '/s2-twin') {
+    try {
+      const dbPath = (options.mobileBotStatusOptions || {}).dbPath || '/tmp/qs2_review/data/s2.sqlite';
+      const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite');
+      const { prepareFilterTwinLog, renderFilterTwinLogBody, FILTER_TWIN_CSS } = require('../portal/filterTwinPanel');
+      const q = new URL(req.url, 'http://localhost').searchParams;
+      const db = createDatabase(dbPath);
+      initSchema(db);
+      const persistence = buildPersistence(db);
+      const data = prepareFilterTwinLog(persistence, { bot: q.get('bot'), mode: q.get('mode'), limit: 300 });
+      const body = renderFilterTwinLogBody(data);
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      if (method !== 'HEAD') res.end(pageShell('s2-twin', 'S2 Filter Twin — Log', FILTER_TWIN_CSS, body));
+      else res.end();
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end(`Failed to render S2 filter-twin log: ${err.message}`);
+    }
+    return;
+  }
+  if (path === '/api/s2-twin') {
+    try {
+      const dbPath = (options.mobileBotStatusOptions || {}).dbPath || '/tmp/qs2_review/data/s2.sqlite';
+      const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite');
+      const { prepareFilterTwinLog } = require('../portal/filterTwinPanel');
+      const q = new URL(req.url, 'http://localhost').searchParams;
+      const db = createDatabase(dbPath);
+      initSchema(db);
+      const persistence = buildPersistence(db);
+      const data = prepareFilterTwinLog(persistence, { bot: q.get('bot'), mode: q.get('mode'), limit: 300 });
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      if (method !== 'HEAD') res.end(JSON.stringify(data));
+      else res.end();
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
   if (path === '/s2-all-signals') {
     try {
       const dbPath = (options.mobileBotStatusOptions || {}).dbPath || '/tmp/qs2_review/data/s2.sqlite';
@@ -1578,7 +1628,7 @@ async function handleRequest(req, res, options) {
         Promise.resolve(loadPaperPortfolio(dbPath)),
         Promise.resolve(loadCapitalPoolData(dbPath)),
       ]);
-      const html = renderS2Page(status, paperPortfolio, cpData);
+      const html = renderS2Page(status, paperPortfolio, cpData, dbPath);
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       if (method !== 'HEAD') res.end(html);
       else res.end();

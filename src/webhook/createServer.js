@@ -6,9 +6,26 @@ const { loadAndValidateSettings } = require('../config/validateSettings');
 const { resolveBotContext } = require('../config/resolveBotContext');
 const { createRiskEngine } = require('../risk/evaluateSignal');
 const { executePaperTrade, executeSignalClose } = require('../execution/bybitExecution');
+const { buildDefaultGate } = require('../filters/circuitBreakers');
+
+// feature/filter-twin: kill switch defaults OFF — zero behaviour change until
+// explicitly enabled (post-restart, after Ian's approval, per deployment order).
+const FILTER_GATE_ENABLED = process.env.FILTER_GATE_ENABLED === 'true';
+const FILTER_STATE_DIR = path.join(__dirname, '..', '..', 'state', 'filters');
+// One-shot deep-diagnostic: the very first gate decision after enable is logged
+// verbosely (full state snapshot + rule + decision + timing), then normal logging.
+let filterFirstDecisionLogged = false;
+const filterGates = {};
+function gateFor(botId) {
+  if (!filterGates[botId]) filterGates[botId] = buildDefaultGate(botId, FILTER_STATE_DIR);
+  return filterGates[botId];
+}
 const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite');
 const { computeS3Score } = require('../scoring/computeS3Score');
 const { executePaperEntry, executePaperSignalClose, executePaperV2Entry, executePaperV2SignalClose, executePaperQPoolEntry, executePaperQPoolSignalClose } = require('../execution/paperExecution');
+// feature/filter-twin: vanilla paper twin — consumes EVERY signal, runs BEFORE
+// the FilterGate, never reads/writes filter state. Gated by PAPER_VANILLA_ENABLED.
+const { executePaperVanilla } = require('../execution/paperVanillaExecutor');
 const { tryDispatchS21 } = require('../s21/webhookHandler');
 
 function isHeartbeatSignal(input) {
@@ -185,22 +202,104 @@ function createWebhookServer(options = {}) {
 
         const isExitSignal = parsedSignal.signal === 'EXIT_LONG' || parsedSignal.signal === 'EXIT_SHORT';
 
-        if (risk.allowed && risk.actionable) {
+        // ── feature/filter-twin: vanilla paper twin (runs BEFORE the gate) ──
+        // Consumes EVERY signal (ENTER + EXIT) regardless of the FilterGate and
+        // never reads/writes filter state. Off by default (PAPER_VANILLA_ENABLED).
+        // Fully isolated: any failure is logged and never affects the live path.
+        if (process.env.PAPER_VANILLA_ENABLED === 'true') {
           setImmediate(async () => {
             try {
-              const execution = await executePaperTrade(parsedSignal, {
-                settingsPath: botContext.settingsPath,
-                botContext,
-                envPath: '/home/ubuntu/.openclaw/.env',
-              });
-              logger.info('Execution result', { execution });
-            } catch (executionError) {
-              logger.warn('Background execution failure', {
-                error: executionError.message,
-                parsedSignal,
+              const vr = await executePaperVanilla(parsedSignal, { dbPath, logger });
+              logger.info('[paper_vanilla] result', { result: vr });
+            } catch (vanillaErr) {
+              logger.error('[paper_vanilla] execution failed', {
+                botId: parsedSignal.botId, signal: parsedSignal.signal,
+                error: vanillaErr.message, stack: vanillaErr.stack,
               });
             }
           });
+        }
+
+        // ── feature/filter-twin: FilterGate on the LIVE path (ENTER only) ──
+        // EXIT signals are never gated — closing a position is risk-reducing.
+        // When the kill switch is OFF, liveFilterAllowed stays true and the
+        // live path is byte-for-byte unchanged.
+        const isEnterForGate = parsedSignal.signal === 'ENTER_LONG' || parsedSignal.signal === 'ENTER_SHORT';
+        let liveFilterAllowed = true;
+        let liveFilterAction = 'take';
+        if (FILTER_GATE_ENABLED && isEnterForGate && risk.allowed && risk.actionable) {
+          try {
+            const gate = gateFor(parsedSignal.botId);
+            const signalTime = parsedSignal.receivedAt ? new Date(parsedSignal.receivedAt) : new Date();
+            const snapBefore = gate.snapshot();
+            const [allow, reason] = gate.shouldTake(signalTime);
+            liveFilterAllowed = allow;
+            liveFilterAction = allow ? 'take' : reason;
+            const verboseThisOne = !filterFirstDecisionLogged;
+            if (verboseThisOne) {
+              filterFirstDecisionLogged = true;
+              logger.info('[FilterGate] FIRST-DECISION DEEP DIAGNOSTIC', {
+                botId: parsedSignal.botId,
+                symbol: botContext.symbol,
+                signal: parsedSignal.signal,
+                signalTimeUtc: signalTime.toISOString(),
+                weekdayUtc: signalTime.getUTCDay(),
+                stateBefore: snapBefore,
+                stateAfter: gate.snapshot(),
+                rules: gate.rules.map(r => r.name),
+                decision: allow ? 'TAKE' : 'SKIP',
+                reason,
+              });
+            } else {
+              logger.info('[FilterGate] decision', {
+                botId: parsedSignal.botId, signal: parsedSignal.signal,
+                decision: allow ? 'TAKE' : 'SKIP', reason,
+              });
+            }
+            persistence.recordFilterDecision({
+              signalTimeUtc: signalTime.toISOString(),
+              botId: parsedSignal.botId,
+              symbol: botContext.symbol,
+              signal: parsedSignal.signal,
+              side: parsedSignal.signal.includes('LONG') ? 'LONG' : 'SHORT',
+              filterAction: liveFilterAction,
+              stateSnapshot: gate.snapshot(),
+              signalPrice: null,
+              verbose: verboseThisOne,
+            });
+          } catch (gateErr) {
+            // Fail-safe: a gate error must never block a live signal.
+            logger.warn('[FilterGate] error — failing open (take)', { error: gateErr.message });
+            liveFilterAllowed = true;
+            liveFilterAction = 'take';
+          }
+        }
+
+        if (risk.allowed && risk.actionable) {
+          // LIVE Bybit submit — gated individually by the FilterGate decision.
+          // Paper twins (P1/P2/QPool/vanilla) below are NEVER gated; they take
+          // every signal as the vanilla baseline.
+          if (liveFilterAllowed) {
+            setImmediate(async () => {
+              try {
+                const execution = await executePaperTrade(parsedSignal, {
+                  settingsPath: botContext.settingsPath,
+                  botContext,
+                  envPath: '/home/ubuntu/.openclaw/.env',
+                });
+                logger.info('Execution result', { execution });
+              } catch (executionError) {
+                logger.warn('Background execution failure', {
+                  error: executionError.message,
+                  parsedSignal,
+                });
+              }
+            });
+          } else {
+            logger.info('[FilterGate] LIVE submit SKIPPED', {
+              botId: parsedSignal.botId, signal: parsedSignal.signal, reason: liveFilterAction,
+            });
+          }
 
           // Paper trade: mirror same entry signal
           if (parsedSignal.signal === 'ENTER_LONG' || parsedSignal.signal === 'ENTER_SHORT') {

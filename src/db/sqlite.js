@@ -340,6 +340,21 @@ function initSchema(db) {
       reject_reason TEXT,
       raw_body TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS filter_decisions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL,
+      signal_time_utc TEXT NOT NULL,
+      bot_id TEXT NOT NULL,
+      symbol TEXT,
+      signal TEXT NOT NULL,
+      side TEXT,
+      mode TEXT NOT NULL DEFAULT 'live_filter',
+      filter_action TEXT NOT NULL,
+      filter_state_snapshot TEXT,
+      signal_price REAL,
+      verbose INTEGER NOT NULL DEFAULT 0
+    );
   `);
 
   const ensureColumn = (tableName, columnName, columnSql) => {
@@ -351,6 +366,42 @@ function initSchema(db) {
 
   ensureColumn('exit_events', 'bot_id', "TEXT NOT NULL DEFAULT 'Bot1'");
   ensureColumn('break_even_events', 'bot_id', "TEXT NOT NULL DEFAULT 'Bot1'");
+
+  // feature/filter-twin: vanilla paper twin trade accounting + mode tagging.
+  ensureColumn('paper_positions', 'mode', "TEXT NOT NULL DEFAULT 'paper_vanilla'");
+  ensureColumn('paper_positions', 'paper_fees_usd', 'REAL');
+  ensureColumn('paper_positions', 'paper_funding_usd', 'REAL');
+  ensureColumn('paper_positions', 'filter_state_snapshot', 'TEXT');
+
+  // One-shot, idempotent backfill: the `mode` column ships with DEFAULT
+  // 'paper_vanilla', and historically insertPaperPosition (P1/P2/QPool) never
+  // set it — so every pre-existing row mislabels as paper_vanilla on first
+  // ALTER. Correct mode from the paper_bot_id prefix (the same discrimination
+  // the getters use). Each UPDATE only touches rows whose mode is wrong, so
+  // re-running on every initSchema is a cheap no-op once converged. The column
+  // DEFAULT is intentionally left unchanged (other code paths may rely on it).
+  db.exec(`
+    UPDATE paper_positions SET mode = 'paper_vanilla'
+      WHERE substr(paper_bot_id,1,8) = 'vanilla_' AND mode <> 'paper_vanilla';
+    UPDATE paper_positions SET mode = 'paper_qpool'
+      WHERE substr(paper_bot_id,1,6) = 'QPool_'   AND mode <> 'paper_qpool';
+    UPDATE paper_positions SET mode = 'paper_p2'
+      WHERE substr(paper_bot_id,1,3) = 'P2_'      AND mode <> 'paper_p2';
+    UPDATE paper_positions SET mode = 'paper_p1'
+      WHERE substr(paper_bot_id,1,2) = 'P_'       AND mode <> 'paper_p1';
+  `);
+}
+
+// Derive the paper_positions.mode tag from a paper_bot_id. Mirrors the
+// backfill above so live inserts and historical rows agree. Order matters:
+// 'P2_' must be tested before 'P_' (disjoint here, but explicit is safer).
+function modeForPaperBotId(paperBotId) {
+  const id = String(paperBotId || '');
+  if (id.startsWith('vanilla_')) return 'paper_vanilla';
+  if (id.startsWith('QPool_')) return 'paper_qpool';
+  if (id.startsWith('P2_')) return 'paper_p2';
+  if (id.startsWith('P_')) return 'paper_p1';
+  return 'paper_unknown';
 }
 
 function buildPersistence(db) {
@@ -588,6 +639,31 @@ function buildPersistence(db) {
         data_available: result.dataAvailable ? 1 : 0,
       });
     },
+    recordFilterDecision(d) {
+      return db.prepare(`
+        INSERT INTO filter_decisions
+          (created_at, signal_time_utc, bot_id, symbol, signal, side, mode,
+           filter_action, filter_state_snapshot, signal_price, verbose)
+        VALUES
+          (@created_at, @signal_time_utc, @bot_id, @symbol, @signal, @side, @mode,
+           @filter_action, @filter_state_snapshot, @signal_price, @verbose)
+      `).run({
+        created_at: new Date().toISOString(),
+        signal_time_utc: d.signalTimeUtc,
+        bot_id: d.botId,
+        symbol: d.symbol || null,
+        signal: d.signal,
+        side: d.side || null,
+        mode: 'live_filter',
+        filter_action: d.filterAction,
+        filter_state_snapshot: d.stateSnapshot ? JSON.stringify(d.stateSnapshot) : null,
+        signal_price: d.signalPrice != null ? d.signalPrice : null,
+        verbose: d.verbose ? 1 : 0,
+      });
+    },
+    getFilterDecisions() {
+      return db.prepare('SELECT * FROM filter_decisions ORDER BY id DESC').all();
+    },
     getS3Scores() {
       return db.prepare('SELECT * FROM s3_scores ORDER BY id DESC').all();
     },
@@ -636,15 +712,17 @@ function buildPersistence(db) {
     },
 
     insertPaperPosition(row) {
+      // Explicit mode (P1/P2/QPool) — no longer relies on the column DEFAULT.
+      const bound = { ...row, mode: row.mode || modeForPaperBotId(row.paper_bot_id) };
       return db.prepare(`
         INSERT INTO paper_positions (
           created_at, paper_bot_id, live_bot_id, symbol, side, signal,
-          entry_price, qty, notional_usd
+          entry_price, qty, notional_usd, mode
         ) VALUES (
           @created_at, @paper_bot_id, @live_bot_id, @symbol, @side, @signal,
-          @entry_price, @qty, @notional_usd
+          @entry_price, @qty, @notional_usd, @mode
         )
-      `).run(row);
+      `).run(bound);
     },
     getOpenPaperPosition(paperBotId) {
       return db.prepare("SELECT * FROM paper_positions WHERE paper_bot_id = ? AND status = 'open' ORDER BY id DESC LIMIT 1").get(paperBotId) || null;
@@ -660,6 +738,41 @@ function buildPersistence(db) {
         UPDATE paper_positions SET status = 'closed', exit_price = ?, exit_reason = ?,
           exit_pnl_pct = ?, exit_pnl_usd = ?, closed_at = ? WHERE id = ?
       `).run(exit_price, exit_reason, exit_pnl_pct, exit_pnl_usd, closed_at, id);
+    },
+    // feature/filter-twin: vanilla paper twin — additive helpers, do not
+    // touch the P1/P2/QPool insert/close helpers above.
+    insertVanillaPaperPosition(row) {
+      return db.prepare(`
+        INSERT INTO paper_positions (
+          created_at, paper_bot_id, live_bot_id, symbol, side, signal,
+          entry_price, qty, notional_usd, mode, filter_state_snapshot
+        ) VALUES (
+          @created_at, @paper_bot_id, @live_bot_id, @symbol, @side, @signal,
+          @entry_price, @qty, @notional_usd, 'paper_vanilla', NULL
+        )
+      `).run(row);
+    },
+    closeVanillaPaperPosition({ id, exit_price, exit_reason, exit_pnl_pct,
+                                exit_pnl_usd, closed_at, paper_fees_usd, paper_funding_usd }) {
+      return db.prepare(`
+        UPDATE paper_positions SET status = 'closed', exit_price = ?, exit_reason = ?,
+          exit_pnl_pct = ?, exit_pnl_usd = ?, closed_at = ?,
+          paper_fees_usd = ?, paper_funding_usd = ? WHERE id = ?
+      `).run(exit_price, exit_reason, exit_pnl_pct, exit_pnl_usd, closed_at,
+             paper_fees_usd, paper_funding_usd, id);
+    },
+    // NOTE: the paper_positions.mode column (added in Phase 1) has DEFAULT
+    // 'paper_vanilla', and insertPaperPosition (P1/P2/QPool) does not set it,
+    // so EVERY pre-existing P1/P2/QPool row also reports mode='paper_vanilla'.
+    // The reliable, retroactively-correct discriminator for the vanilla twin
+    // is therefore the paper_bot_id prefix ('vanilla_<botId>'), not mode.
+    getOpenVanillaPaperPosition(liveBotId) {
+      return db.prepare(
+        "SELECT * FROM paper_positions WHERE live_bot_id = ? AND substr(paper_bot_id,1,8) = 'vanilla_' AND status = 'open' ORDER BY id DESC LIMIT 1"
+      ).get(liveBotId) || null;
+    },
+    getVanillaPaperPositions() {
+      return db.prepare("SELECT * FROM paper_positions WHERE substr(paper_bot_id,1,8) = 'vanilla_' ORDER BY id ASC").all();
     },
     updatePaperPositionRemainingQty(id, remaining_qty_pct) {
       return db.prepare('UPDATE paper_positions SET remaining_qty_pct = ? WHERE id = ?').run(remaining_qty_pct, id);
@@ -906,4 +1019,5 @@ module.exports = {
   createDatabase,
   initSchema,
   buildPersistence,
+  modeForPaperBotId,
 };
