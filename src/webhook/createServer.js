@@ -23,6 +23,9 @@ function gateFor(botId) {
 const { createDatabase, initSchema, buildPersistence } = require('../db/sqlite');
 const { computeS3Score } = require('../scoring/computeS3Score');
 const { executePaperEntry, executePaperSignalClose, executePaperV2Entry, executePaperV2SignalClose, executePaperQPoolEntry, executePaperQPoolSignalClose } = require('../execution/paperExecution');
+// feature/filter-twin: vanilla paper twin — consumes EVERY signal, runs BEFORE
+// the FilterGate, never reads/writes filter state. Gated by PAPER_VANILLA_ENABLED.
+const { executePaperVanilla } = require('../execution/paperVanillaExecutor');
 const { tryDispatchS21 } = require('../s21/webhookHandler');
 
 function isHeartbeatSignal(input) {
@@ -198,6 +201,24 @@ function createWebhookServer(options = {}) {
         logger.info('Risk evaluation result', { risk: loggableRisk });
 
         const isExitSignal = parsedSignal.signal === 'EXIT_LONG' || parsedSignal.signal === 'EXIT_SHORT';
+
+        // ── feature/filter-twin: vanilla paper twin (runs BEFORE the gate) ──
+        // Consumes EVERY signal (ENTER + EXIT) regardless of the FilterGate and
+        // never reads/writes filter state. Off by default (PAPER_VANILLA_ENABLED).
+        // Fully isolated: any failure is logged and never affects the live path.
+        if (process.env.PAPER_VANILLA_ENABLED === 'true') {
+          setImmediate(async () => {
+            try {
+              const vr = await executePaperVanilla(parsedSignal, { dbPath, logger });
+              logger.info('[paper_vanilla] result', { result: vr });
+            } catch (vanillaErr) {
+              logger.error('[paper_vanilla] execution failed', {
+                botId: parsedSignal.botId, signal: parsedSignal.signal,
+                error: vanillaErr.message, stack: vanillaErr.stack,
+              });
+            }
+          });
+        }
 
         // ── feature/filter-twin: FilterGate on the LIVE path (ENTER only) ──
         // EXIT signals are never gated — closing a position is risk-reducing.
