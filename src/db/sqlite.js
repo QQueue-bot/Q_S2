@@ -372,6 +372,36 @@ function initSchema(db) {
   ensureColumn('paper_positions', 'paper_fees_usd', 'REAL');
   ensureColumn('paper_positions', 'paper_funding_usd', 'REAL');
   ensureColumn('paper_positions', 'filter_state_snapshot', 'TEXT');
+
+  // One-shot, idempotent backfill: the `mode` column ships with DEFAULT
+  // 'paper_vanilla', and historically insertPaperPosition (P1/P2/QPool) never
+  // set it — so every pre-existing row mislabels as paper_vanilla on first
+  // ALTER. Correct mode from the paper_bot_id prefix (the same discrimination
+  // the getters use). Each UPDATE only touches rows whose mode is wrong, so
+  // re-running on every initSchema is a cheap no-op once converged. The column
+  // DEFAULT is intentionally left unchanged (other code paths may rely on it).
+  db.exec(`
+    UPDATE paper_positions SET mode = 'paper_vanilla'
+      WHERE substr(paper_bot_id,1,8) = 'vanilla_' AND mode <> 'paper_vanilla';
+    UPDATE paper_positions SET mode = 'paper_qpool'
+      WHERE substr(paper_bot_id,1,6) = 'QPool_'   AND mode <> 'paper_qpool';
+    UPDATE paper_positions SET mode = 'paper_p2'
+      WHERE substr(paper_bot_id,1,3) = 'P2_'      AND mode <> 'paper_p2';
+    UPDATE paper_positions SET mode = 'paper_p1'
+      WHERE substr(paper_bot_id,1,2) = 'P_'       AND mode <> 'paper_p1';
+  `);
+}
+
+// Derive the paper_positions.mode tag from a paper_bot_id. Mirrors the
+// backfill above so live inserts and historical rows agree. Order matters:
+// 'P2_' must be tested before 'P_' (disjoint here, but explicit is safer).
+function modeForPaperBotId(paperBotId) {
+  const id = String(paperBotId || '');
+  if (id.startsWith('vanilla_')) return 'paper_vanilla';
+  if (id.startsWith('QPool_')) return 'paper_qpool';
+  if (id.startsWith('P2_')) return 'paper_p2';
+  if (id.startsWith('P_')) return 'paper_p1';
+  return 'paper_unknown';
 }
 
 function buildPersistence(db) {
@@ -682,15 +712,17 @@ function buildPersistence(db) {
     },
 
     insertPaperPosition(row) {
+      // Explicit mode (P1/P2/QPool) — no longer relies on the column DEFAULT.
+      const bound = { ...row, mode: row.mode || modeForPaperBotId(row.paper_bot_id) };
       return db.prepare(`
         INSERT INTO paper_positions (
           created_at, paper_bot_id, live_bot_id, symbol, side, signal,
-          entry_price, qty, notional_usd
+          entry_price, qty, notional_usd, mode
         ) VALUES (
           @created_at, @paper_bot_id, @live_bot_id, @symbol, @side, @signal,
-          @entry_price, @qty, @notional_usd
+          @entry_price, @qty, @notional_usd, @mode
         )
-      `).run(row);
+      `).run(bound);
     },
     getOpenPaperPosition(paperBotId) {
       return db.prepare("SELECT * FROM paper_positions WHERE paper_bot_id = ? AND status = 'open' ORDER BY id DESC LIMIT 1").get(paperBotId) || null;
@@ -987,4 +1019,5 @@ module.exports = {
   createDatabase,
   initSchema,
   buildPersistence,
+  modeForPaperBotId,
 };
