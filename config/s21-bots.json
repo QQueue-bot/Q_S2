@@ -6,6 +6,7 @@
       "engine": "s2_1",
       "enabled": true,
       "dryRun": true,
+      "dryRunLock": "PAPER_ONLY — do not set dryRun:false without Ian explicit approval",
       "symbol": "DEEPUSDT",
       "displayName": "DEEP",
       "notionalUsd": 500,

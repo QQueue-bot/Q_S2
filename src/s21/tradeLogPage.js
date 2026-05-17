@@ -281,6 +281,10 @@ function renderTradeLogBody(data) {
     : data.signals.map(_renderSignalRow).join('\n');
 
   return `
+    <div class="s21-paper-banner">
+      <div class="s21-paper-banner-title">⚠ Paper Trading — Not Connected to Live Account</div>
+      <div class="s21-paper-banner-sub">S2.1 is in dry-run mode. No real orders are being placed.</div>
+    </div>
     <div class="s21-wrap" id="s21-root">
       <div class="s21-pane-head">
         <div>
@@ -325,6 +329,10 @@ function renderTradeLogBody(data) {
 }
 
 const TRADE_LOG_CSS = `
+  .s21-paper-banner { background: #d97706; color: #1c1917; padding: 12px 16px; text-align: center; width: 100%; box-sizing: border-box; }
+  .s21-paper-banner-title { font-size: 16px; font-weight: 800; }
+  .s21-paper-banner-sub { font-size: 12px; margin-top: 4px; }
+
   .s21-wrap { padding: 12px; max-width: 720px; margin: 0 auto; }
   .s21-pane-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
   .s21-title { font-size: 20px; font-weight: 800; color: #e2e8f0; }
